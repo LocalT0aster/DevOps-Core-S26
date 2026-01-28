@@ -185,3 +185,7 @@ $ curl -sS 127.0.0.1:3926/health | jq
 
 1. **Framework choice** - I went with Flask because I did not know any Python API framework and Flask looked simplest; the lab examples were already in Flask.
 2. **Listing endpoints dynamically** - I struggled with Flask's routing introspection; a StackOverflow snippet didn't work, and ChatGPT helped me craft a working approach.
+
+## GitHub Community
+
+Starring repositories helps me bookmark useful projects and signal appreciation, which improves visibility in open source. Following developers keeps me aware of what classmates and maintainers are doing, supporting collaboration and professional growth.
