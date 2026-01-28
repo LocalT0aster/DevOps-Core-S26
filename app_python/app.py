@@ -5,28 +5,32 @@ Main application module
 
 __version__ = "1.0.0"
 
-
-from pydoc import describe
-from flask import Flask, jsonify, request
-from datetime import datetime, timezone
-from multiprocessing import cpu_count
-import time
-import platform
-import socket
+# Basics
 import os
+from datetime import datetime, timezone
 import logging
-import inspect
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Metadata gathering
+from multiprocessing import cpu_count
+import platform
+import inspect
+
+# Web
+import socket
+
+from flask import Flask, jsonify, request
 
 # Configuration
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", 5000))
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+app = Flask(__name__)
 
 
 def get_service_info() -> dict[str, str]:
@@ -39,10 +43,11 @@ def get_service_info() -> dict[str, str]:
     }
 
 
-def get_system_info() -> dict[str, str | int]:
+def get_platform_info() -> dict[str, str | int]:
     """Collect system information"""
 
     def _platform_version() -> str:
+        """Return a human-friendly OS version string."""
         match (platform.system().lower()):
             case "linux":
                 return platform.freedesktop_os_release()["PRETTY_NAME"]
@@ -62,7 +67,7 @@ def get_system_info() -> dict[str, str | int]:
 
 
 def get_uptime():
-    """Get uptime info"""
+    """Return uptime in seconds and a simple human string."""
     delta = datetime.now(tz=timezone.utc) - START_TIME
     up_seconds = int(delta.total_seconds())
     up_hours = up_seconds // 3600
@@ -74,6 +79,7 @@ def get_uptime():
 
 
 def get_runtime():
+    """Return current runtime metadata (uptime + UTC timestamp)."""
     up = get_uptime()
     return {
         "uptime_seconds": up["seconds"],
@@ -84,16 +90,17 @@ def get_runtime():
 
 
 def get_request_info(request):
-    """Returns request info"""
+    """Return basic request metadata for debugging/telemetry."""
     return {
-        "client_ip": request.remote_addr,  # Client IP
-        "user_agent": request.headers.get("User-Agent"),  # User agent
-        "method": request.method,  # HTTP method
-        "path": request.path,  # Request path
+        "client_ip": request.remote_addr,
+        "user_agent": request.headers.get("User-Agent"),
+        "method": request.method,
+        "path": request.path,
     }
 
 
 def list_routes() -> list[dict[str, str]]:
+    """Return a flat list of route + method + description."""
     out: list[dict[str, str]] = []
 
     for rule in sorted(app.url_map.iter_rules(), key=lambda r: (r.rule, r.endpoint)):
@@ -103,7 +110,7 @@ def list_routes() -> list[dict[str, str]]:
 
         view = app.view_functions.get(rule.endpoint)
 
-        # Description strategy: custom attribute first, otherwise docstring
+        # Description is pulled from docstring's brief (first line)
         desc = ""
         if view is not None:
             desc = inspect.getdoc(view) or ""
@@ -127,7 +134,7 @@ def index():
     return jsonify(
         {
             "service": get_service_info(),
-            "system": get_system_info(),
+            "system": get_platform_info(),
             "runtime": get_uptime(),
             "request": get_request_info(request),
             "endpoints": list_routes(),
@@ -138,6 +145,7 @@ def index():
 @app.route("/health")
 def health():
     """Health check"""
+    logger.debug(f"Request: {request.method} {request.path}")
     return jsonify(
         {
             "status": "healthy",
@@ -149,12 +157,14 @@ def health():
 
 @app.errorhandler(404)
 def not_found(error):
+    """Return a JSON 404 payload."""
     logger.debug(f"Request: {request.method} {request.path}")
     return jsonify({"error": "Not Found", "message": "Endpoint does not exist"}), 404
 
 
 @app.errorhandler(500)
 def internal_error(error):
+    """Return a JSON 500 payload."""
     return (
         jsonify(
             {
@@ -166,7 +176,9 @@ def internal_error(error):
     )
 
 
-START_TIME = datetime.now(timezone.utc)  # Application start time
+START_TIME = datetime.now(timezone.utc)  # Application start time (UTC).
 logger.info("Application starting...")
 
-app.run(host=HOST, port=PORT)
+# TODO use WSGI in production.
+if __name__ == "__main__":
+    app.run(host=HOST, port=PORT, debug=DEBUG)
