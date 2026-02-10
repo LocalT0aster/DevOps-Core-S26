@@ -17,6 +17,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+### Docker
+
+- Pull the container:
+  ```bash
+  docker pull localt0aster/devops-app-py
+  ```
+- OR build the container yourself:
+  ```bash
+  docker build -t localt0aster/devops-app-py .
+  ```
+
 ## Running the Application
 
 ```bash
@@ -24,6 +35,13 @@ python app.py
 # Or with custom config
 PORT=8080 HOST=127.0.0.1 python app.py
 ```
+
+### Docker
+
+- Run the container:
+  ```bash
+  docker run -p 5000:5000 -e HOST="0.0.0.0" -d localt0aster/devops-app-py
+  ```
 
 ## API Endpoints
 
