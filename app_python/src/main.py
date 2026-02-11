@@ -5,9 +5,12 @@ Application runtime entrypoint.
 
 import os
 
-from flask_instance import app, logger
-import router  # noqa: F401
-logger.info("b")
+try:
+    from .flask_instance import app, logger
+    from . import router  # noqa: F401
+except ImportError:  # pragma: no cover - allows `python src/main.py`
+    from flask_instance import app, logger
+    import router  # noqa: F401
 
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", 5000))

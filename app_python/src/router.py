@@ -9,7 +9,11 @@ import platform
 import socket
 
 from flask import jsonify, request
-from flask_instance import START_TIME, app, logger
+
+try:
+    from .flask_instance import START_TIME, app, logger
+except ImportError:  # pragma: no cover - allows `python src/main.py`
+    from flask_instance import START_TIME, app, logger
 
 __version__ = "1.0.0"
 
