@@ -19,12 +19,18 @@
 
 **Current CI trigger configuration:**
 
-- workflow file: `.github/workflows/app_python.yml`
-- trigger: `push` with path filters for `app_python/**` and workflow file changes
+- workflow files:
+  - `.github/workflows/python-ci.yml` (lint + tests + coverage reports)
+  - `.github/workflows/python-snyk.yml` (security scan)
+  - `.github/workflows/python-docker.yml` (container publish)
+- triggers:
+  - CI/Snyk: `push` + `pull_request` with path filters
+  - Docker publish: `pull_request` on `master`, `types: [closed]`, then gated by `merged == true`
 
 **Versioning strategy (SemVer/CalVer):**
 
-- `TODO`: not documented/implemented yet for Docker image tagging in CI
+- SemVer-style lab release tags: `1.<lab-number>` + `latest`
+- lab number is extracted from merged branch name (example: `lab03` -> `1.3`)
 
 ## 2. Workflow Evidence
 
@@ -63,23 +69,26 @@ TOTAL                      77      0   100%
 
 Coverage note:
 
-- The output above was captured before excluding launcher-only code.
-- `src/main.py` line 27 (`if __name__ == "__main__":`) is now marked with `# pragma: no cover`.
+- `src/main.py` launcher-only branch is excluded with `# pragma: no cover`.
 
 ## 3. Best Practices Implemented
 
 - **Practice 1: Path-based trigger filtering**: avoids running Python CI when unrelated folders change.
 - **Practice 2: Lint + test stages in CI**: catches style and functional issues early.
 - **Practice 3: Coverage reporting in CI command**: makes test quality visible, not just pass/fail.
+- **Practice 4: Pipeline separation by concern**: test, security, and deploy concerns run independently for clearer failure diagnosis.
+- **Practice 5: Reusable setup action**: shared Python/Poetry setup is centralized in `.github/actions/python-setup/action.yml` to avoid duplication.
 - **Caching**: `actions/cache` stores `~/.cache/pypoetry` and `app_python/.venv` using a `poetry.lock`-based key.
-- **Snyk**: `TODO` (not integrated/documented yet).
+- **Snyk**: integrated via `snyk/actions/setup` + `snyk test --severity-threshold=high`.
+- **Snyk token handling**: workflow skips Snyk step if `SNYK_TOKEN` secret is missing.
 
 ## 4. Key Decisions
 
-- **Versioning Strategy:** `TODO` (SemVer or CalVer not yet implemented for Docker tags).
-- **Docker Tags:** `TODO` (version tags + `latest` not yet shown).
-- **Workflow Triggers:** path-filtered `push` trigger to reduce unnecessary runs in a monorepo.
+- **Versioning Strategy:** SemVer-style `1.<lab-number>` because releases happen once per lab and are easy to map back to coursework milestones.
+- **Docker Tags:** each merged lab release pushes two tags: `1.<lab-number>` and `latest`.
+- **Workflow Triggers:** path-filtered pushes/PRs for CI and Snyk, with container publishing gated on merged PRs to `master`.
 - **Test Coverage:** endpoint and helper logic are covered; launcher-only code is excluded with pragma.
+- **Snyk policy:** CI fails only for vulnerabilities at `high` severity or above.
 
 ## 5. Challenges (Optional)
 
