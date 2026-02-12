@@ -23,6 +23,7 @@
   - `.github/workflows/python-ci.yml` (lint + tests + coverage reports)
   - `.github/workflows/python-snyk.yml` (security scan)
   - `.github/workflows/python-docker.yml` (container publish)
+- note: Docker login/build/push is intentionally separated into `python-docker.yml` rather than embedded in `python-ci.yml`.
 - triggers:
   - CI/Snyk: `push` + `pull_request` with path filters
   - Docker publish:
@@ -39,10 +40,18 @@
 Provide links/terminal output for:
 
 - Tests passing locally (terminal output below)
-- Successful workflow run link (GitHub Actions): `TODO`
-- Docker image on Docker Hub (link): `TODO`
+- Successful workflow run links (GitHub Actions):
+  - Python CI: <https://github.com/LocalT0aster/DevOps-Core-S26/actions/runs/21961075842>
+  - Python Docker Publish: <https://github.com/LocalT0aster/DevOps-Core-S26/actions/runs/21961075837>
+  - Python Snyk Scan: <https://github.com/LocalT0aster/DevOps-Core-S26/actions/runs/21961075835>
+- Docker image on Docker Hub (links):
+  - Tags page: <https://hub.docker.com/r/localt0aster/devops-app-py/tags>
+  - Example pushed tag (`1.3.d4ae1ce`): <https://hub.docker.com/layers/localt0aster/devops-app-py/1.3.d4ae1ce/images/sha256-5a8c9cadf43aebbc56017a4ace756123b482555da679aae525e8bf53210a03f8>
 - Status badge in `app_python/README.md`:
-  - <https://github.com/LocalT0aster/DevOps-Core-S25/actions/workflows/python-ci.yml>
+  - <https://github.com/LocalT0aster/DevOps-Core-S26/actions/workflows/python-ci.yml>
+
+<details>
+<summary>pytest output log</summary>
 
 ```log
 $ poetry run pytest --cov=src --cov-report=term-missing
@@ -69,9 +78,7 @@ TOTAL                      77      0   100%
 ========================= 10 passed in 0.06s ==========================
 ```
 
-Coverage note:
-
-- `src/main.py` launcher-only branch is excluded with `# pragma: no cover`.
+</details>
 
 ## 3. Best Practices Implemented
 
@@ -83,6 +90,25 @@ Coverage note:
 - **Caching**: `actions/cache` stores `~/.cache/pypoetry` and `app_python/.venv` using a `poetry.lock`-based key.
 - **Snyk**: integrated via `snyk/actions/setup` + `snyk test --severity-threshold=high`.
 - **Snyk token handling**: workflow skips Snyk step if `SNYK_TOKEN` secret is missing.
+
+<details>
+<summary>Snyk result (run #21961075835)</summary>
+
+```
+Testing /home/runner/work/DevOps-Core-S26/DevOps-Core-S26/app_python...
+
+Organization:      localt0aster
+Package manager:   poetry
+Target file:       pyproject.toml
+Project name:      devops-info-service
+Open source:       no
+Project path:      /home/runner/work/DevOps-Core-S26/DevOps-Core-S26/app_python
+Licenses:          enabled
+
+✔ Tested 15 dependencies for known issues, no vulnerable paths found.
+```
+
+</details>
 
 ## 4. Key Decisions
 

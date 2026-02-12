@@ -1,6 +1,6 @@
 # DevOps Info Service
 
-[![Python CI](https://github.com/LocalT0aster/DevOps-Core-S25/actions/workflows/python-ci.yml/badge.svg)](https://github.com/LocalT0aster/DevOps-Core-S25/actions/workflows/python-ci.yml)
+[![Python CI](https://github.com/LocalT0aster/DevOps-Core-S26/actions/workflows/python-ci.yml/badge.svg)](https://github.com/LocalT0aster/DevOps-Core-S26/actions/workflows/python-ci.yml)
 
 ## Overview
 
