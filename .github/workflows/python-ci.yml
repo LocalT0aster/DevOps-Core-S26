@@ -27,13 +27,22 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-          cache: poetry
-          cache-dependency-path: app_python/poetry.lock
       - uses: snok/install-poetry@v1
         with:
           version: ${{ matrix.poetry-version }}
+      - name: Configure Poetry virtualenv location
+        run: poetry config virtualenvs.in-project true
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            app_python/.venv
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-poetry${{ matrix.poetry-version }}-${{ hashFiles('app_python/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-py${{ matrix.python-version }}-poetry${{ matrix.poetry-version }}-
       - name: Install dependencies
-        run: poetry install
+        run: poetry install --with dev --no-interaction --no-ansi
       - name: Lint with flake8
         run: poetry run flake8 src tests
       - name: Test using pytest with coverage report

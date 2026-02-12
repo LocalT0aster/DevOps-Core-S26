@@ -36,7 +36,7 @@ Provide links/terminal output for:
 - Status badge in `app_python/README.md`:
   - <https://github.com/LocalT0aster/DevOps-Core-S25/actions/workflows/python-ci.yml>
 
-```text
+```log
 $ poetry run pytest --cov=src --cov-report=term-missing
 ========================= test session starts =========================
 platform linux -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
@@ -71,7 +71,7 @@ Coverage note:
 - **Practice 1: Path-based trigger filtering**: avoids running Python CI when unrelated folders change.
 - **Practice 2: Lint + test stages in CI**: catches style and functional issues early.
 - **Practice 3: Coverage reporting in CI command**: makes test quality visible, not just pass/fail.
-- **Caching**: `actions/setup-python` Poetry cache enabled with lockfile-based invalidation.
+- **Caching**: `actions/cache` stores `~/.cache/pypoetry` and `app_python/.venv` using a `poetry.lock`-based key.
 - **Snyk**: `TODO` (not integrated/documented yet).
 
 ## 4. Key Decisions
