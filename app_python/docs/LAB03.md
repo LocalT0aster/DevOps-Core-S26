@@ -25,7 +25,9 @@
   - `.github/workflows/python-docker.yml` (container publish)
 - triggers:
   - CI/Snyk: `push` + `pull_request` with path filters
-  - Docker publish: `pull_request` on `master`, `types: [closed]`, then gated by `merged == true`
+  - Docker publish:
+    - branch pushes to `lab*` publish `1.<lab-number>.<short-sha>`
+    - merged PRs to `master` publish `1.<lab-number>` + `latest`
 
 **Versioning strategy (SemVer/CalVer):**
 
@@ -85,7 +87,7 @@ Coverage note:
 ## 4. Key Decisions
 
 - **Versioning Strategy:** SemVer-style `1.<lab-number>` because releases happen once per lab and are easy to map back to coursework milestones.
-- **Docker Tags:** each merged lab release pushes two tags: `1.<lab-number>` and `latest`.
+- **Docker Tags:** branch builds publish `1.<lab-number>.<short-sha>`; merged lab releases publish `1.<lab-number>` and `latest`.
 - **Workflow Triggers:** path-filtered pushes/PRs for CI and Snyk, with container publishing gated on merged PRs to `master`.
 - **Test Coverage:** endpoint and helper logic are covered; launcher-only code is excluded with pragma.
 - **Snyk policy:** CI fails only for vulnerabilities at `high` severity or above.
