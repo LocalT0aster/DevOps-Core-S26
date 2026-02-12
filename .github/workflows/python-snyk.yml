@@ -26,9 +26,12 @@ jobs:
         uses: ./.github/actions/python-setup
       - name: Setup Snyk CLI
         uses: snyk/actions/setup@master
-      - name: Run Snyk dependency scan
+      - name: Run Snyk dependency scan (or skip)
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        run: snyk test --severity-threshold=high
-      - name: Snyk scan skipped
-        run: echo "SNYK_TOKEN secret not set; skipping Snyk dependency scan."
+        run: |
+          if [ -z "${SNYK_TOKEN:-}" ]; then
+            echo "SNYK_TOKEN secret not set; skipping Snyk dependency scan."
+            exit 0
+          fi
+          snyk test --severity-threshold=high
