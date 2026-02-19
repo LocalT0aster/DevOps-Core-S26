@@ -1,40 +1,25 @@
 """
-DevOps Info Service
-Main application module
+Route handlers and response helpers.
 """
+
+from datetime import datetime, timezone
+import inspect
+from multiprocessing import cpu_count
+import platform
+import socket
+
+from flask import jsonify, request
+
+try:
+    from .flask_instance import START_TIME, app, logger
+except ImportError:  # pragma: no cover - allows `python src/main.py`
+    from flask_instance import START_TIME, app, logger
 
 __version__ = "1.0.0"
 
-# Basics
-import os
-from datetime import datetime, timezone
-import logging
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-# Metadata gathering
-from multiprocessing import cpu_count
-import platform
-import inspect
-
-# Web
-import socket
-
-from flask import Flask, jsonify, request
-
-# Configuration
-HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", 5000))
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-
-app = Flask(__name__)
-
 
 def get_service_info() -> dict[str, str]:
-    """Collect info about service"""
+    """Collect info about service."""
     return {
         "name": "devops-info-service",
         "version": __version__,
@@ -44,11 +29,11 @@ def get_service_info() -> dict[str, str]:
 
 
 def get_platform_info() -> dict[str, str | int]:
-    """Collect system information"""
+    """Collect system information."""
 
     def _platform_version() -> str:
         """Return a human-friendly OS version string."""
-        match (platform.system().lower()):
+        match platform.system().lower():
             case "linux":
                 return platform.freedesktop_os_release()["PRETTY_NAME"]
             case "windows":
@@ -66,7 +51,7 @@ def get_platform_info() -> dict[str, str | int]:
     }
 
 
-def get_uptime():
+def get_uptime() -> dict[str, str | int]:
     """Return uptime in seconds and a simple human string."""
     delta = datetime.now(tz=timezone.utc) - START_TIME
     up_seconds = int(delta.total_seconds())
@@ -78,7 +63,7 @@ def get_uptime():
     }
 
 
-def get_runtime():
+def get_runtime() -> dict[str, str | int]:
     """Return current runtime metadata (uptime + UTC timestamp)."""
     up = get_uptime()
     return {
@@ -89,13 +74,13 @@ def get_runtime():
     }
 
 
-def get_request_info(request):
+def get_request_info(req) -> dict[str, str | None]:
     """Return basic request metadata for debugging/telemetry."""
     return {
-        "client_ip": request.remote_addr,
-        "user_agent": request.headers.get("User-Agent"),
-        "method": request.method,
-        "path": request.path,
+        "client_ip": req.remote_addr,
+        "user_agent": req.headers.get("User-Agent"),
+        "method": req.method,
+        "path": req.path,
     }
 
 
@@ -104,13 +89,11 @@ def list_routes() -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
 
     for rule in sorted(app.url_map.iter_rules(), key=lambda r: (r.rule, r.endpoint)):
-        # Skip Flask's built-in static handler
         if rule.endpoint == "static":
             continue
 
         view = app.view_functions.get(rule.endpoint)
 
-        # Description is pulled from docstring's brief (first line)
         desc = ""
         if view is not None:
             desc = inspect.getdoc(view) or ""
@@ -129,8 +112,8 @@ def list_routes() -> list[dict[str, str]]:
 
 @app.route("/")
 def index():
-    """Service information"""
-    logger.debug(f"Request: {request.method} {request.path}")
+    """Service information."""
+    logger.debug("Request: %s %s", request.method, request.path)
     return jsonify(
         {
             "service": get_service_info(),
@@ -144,8 +127,8 @@ def index():
 
 @app.route("/health")
 def health():
-    """Health check"""
-    logger.debug(f"Request: {request.method} {request.path}")
+    """Health check."""
+    logger.debug("Request: %s %s", request.method, request.path)
     return jsonify(
         {
             "status": "healthy",
@@ -156,14 +139,14 @@ def health():
 
 
 @app.errorhandler(404)
-def not_found(error):
+def not_found(error):  # noqa: ARG001
     """Return a JSON 404 payload."""
-    logger.debug(f"Request: {request.method} {request.path}")
+    logger.debug("Request: %s %s", request.method, request.path)
     return jsonify({"error": "Not Found", "message": "Endpoint does not exist"}), 404
 
 
 @app.errorhandler(500)
-def internal_error(error):
+def internal_error(error):  # noqa: ARG001
     """Return a JSON 500 payload."""
     return (
         jsonify(
@@ -174,11 +157,3 @@ def internal_error(error):
         ),
         500,
     )
-
-
-START_TIME = datetime.now(timezone.utc)  # Application start time (UTC).
-logger.info("Application starting...")
-
-# TODO use WSGI in production.
-if __name__ == "__main__":
-    app.run(host=HOST, port=PORT, debug=DEBUG)
