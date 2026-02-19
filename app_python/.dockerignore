@@ -1,4 +1,4 @@
 *
-!app.py
-!requirements.txt
-!tests/*
+!src/**
+!pyproject.toml
+!poetry.lock

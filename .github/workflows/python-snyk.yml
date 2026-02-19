@@ -1,0 +1,37 @@
+name: Python Snyk Scan
+
+on:
+  push:
+    paths:
+      - app_python/**
+      - .github/actions/python-setup/**
+      - .github/workflows/python-snyk.yml
+  pull_request:
+    branches:
+      - master
+    paths:
+      - app_python/**
+      - .github/actions/python-setup/**
+      - .github/workflows/python-snyk.yml
+
+jobs:
+  snyk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app_python
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python tooling and dependencies
+        uses: ./.github/actions/python-setup
+      - name: Setup Snyk CLI
+        uses: snyk/actions/setup@master
+      - name: Run Snyk dependency scan (or skip)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          if [ -z "${SNYK_TOKEN:-}" ]; then
+            echo "SNYK_TOKEN secret not set; skipping Snyk dependency scan."
+            exit 0
+          fi
+          snyk test --severity-threshold=high
