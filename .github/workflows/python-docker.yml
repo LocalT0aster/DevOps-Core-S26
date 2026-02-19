@@ -1,0 +1,82 @@
+name: Python Docker Publish
+
+on:
+  push:
+    branches:
+      - "lab*"
+    paths:
+      - app_python/**
+      - .github/workflows/python-docker.yml
+  pull_request:
+    branches:
+      - master
+    types:
+      - closed
+    paths:
+      - app_python/**
+      - .github/workflows/python-docker.yml
+
+jobs:
+  build-and-push-branch:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive lab+sha tag from branch
+        id: version
+        run: |
+          source_branch="${{ github.ref_name }}"
+          if [[ "$source_branch" =~ ([0-9]+) ]]; then
+            lab_number="${BASH_REMATCH[1]}"
+            lab_number=$((10#$lab_number))
+            short_sha="${GITHUB_SHA::7}"
+            echo "branch_tag=1.${lab_number}.${short_sha}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Failed to extract lab number from branch: $source_branch" >&2
+            exit 1
+          fi
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push Docker image (branch)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app_python
+          file: ./app_python/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:${{ steps.version.outputs.branch_tag }}
+
+  build-and-push:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive lab version tag from merged branch
+        id: version
+        run: |
+          source_branch="${{ github.event.pull_request.head.ref }}"
+          if [[ "$source_branch" =~ ([0-9]+) ]]; then
+            lab_number="${BASH_REMATCH[1]}"
+            lab_number=$((10#$lab_number))
+            echo "version_tag=1.${lab_number}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Failed to extract lab number from merged branch: $source_branch" >&2
+            exit 1
+          fi
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app_python
+          file: ./app_python/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:${{ steps.version.outputs.version_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:latest

@@ -1,20 +1,20 @@
 # DevOps Info Service
 
+[![Python CI](https://github.com/LocalT0aster/DevOps-Core-S26/actions/workflows/python-ci.yml/badge.svg)](https://github.com/LocalT0aster/DevOps-Core-S26/actions/workflows/python-ci.yml)
+
 ## Overview
 
 Small Flask web service that reports service metadata, system information, runtime uptime, and basic request details. Includes a simple health check endpoint for monitoring.
 
 ## Prerequisites
 
-- Python 3.14
-- Dependencies from `requirements.txt`
+- Python 3.13+
+- Poetry
 
 ## Installation
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+poetry install
 ```
 
 ### Docker
@@ -27,13 +27,19 @@ pip install -r requirements.txt
   ```bash
   docker build -t localt0aster/devops-app-py .
   ```
+  The Docker build installs dependencies with:
+  ```bash
+  poetry install --only main --no-root
+  ```
 
 ## Running the Application
 
+Production-style local run with Gunicorn:
+
 ```bash
-python app.py
+poetry run gunicorn --bind 0.0.0.0:5000 src.flask_instance:app
 # Or with custom config
-PORT=8080 HOST=127.0.0.1 python app.py
+HOST=127.0.0.1 PORT=8080 poetry run gunicorn --bind 127.0.0.1:8080 src.flask_instance:app
 ```
 
 ### Docker
@@ -55,3 +61,25 @@ PORT=8080 HOST=127.0.0.1 python app.py
 | `HOST`   | `0.0.0.0` | Bind address for the server              |
 | `PORT`   | `5000`    | Port to listen on                        |
 | `DEBUG`  | `False`   | Enable Flask debug mode (`true`/`false`) |
+
+## Testing
+
+The project uses `pytest` for unit tests.
+
+```bash
+poetry install --with dev
+poetry run pytest --cov=src --cov-report=term-missing
+```
+
+## Linting
+
+```bash
+poetry run flake8 src tests
+```
+
+Current test coverage includes:
+
+- `GET /` successful response schema and types
+- `GET /health` successful response schema and types
+- `404` JSON error handling for unknown routes
+- `500` JSON error handling for simulated internal failures
