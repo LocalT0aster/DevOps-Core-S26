@@ -19,8 +19,8 @@ output "public_ip_equivalent" {
 }
 
 output "ssh_command" {
-  description = "SSH command pattern if you install and start openssh-server inside the Ubuntu container."
-  value       = "ssh -p ${var.ssh_host_port} ubuntu@127.0.0.1"
+  description = "SSH command for the VM-like container."
+  value       = "ssh -i ${var.ssh_private_key_path} -p ${var.ssh_host_port} ${var.vm_user}@127.0.0.1"
 }
 
 output "container_shell_command" {

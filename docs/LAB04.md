@@ -20,14 +20,14 @@
 - Project path: `terraform/`.
 - Main files:
   - `versions.tf`: provider + required version.
-  - `main.tf`: network + Ubuntu VM container + published ports.
+  - `main.tf`: network + Ubuntu VM container + startup bootstrap for SSH/HTTP services + published ports.
   - `variables.tf`: bind IPs, host ports, labels.
   - `outputs.tf`: endpoints and connection commands.
 
 ### Key Decisions
 
 - Used Ubuntu image directly to keep `apply` simple and avoid local custom image build failures.
-- Used a long-running command (`sleep` loop) so container stays available as VM equivalent.
+- Used startup bootstrap in the container command to install and run `openssh-server` and HTTP services automatically.
 - Bound SSH to `127.0.0.1` by default to reduce exposure.
 
 ### Challenges
@@ -37,18 +37,34 @@
 
 ### Command Output
 
-```bash
-cd terraform
-tofu init -plugin-dir="$HOME/.terraform.d/plugins"
-tofu plan
-tofu apply -auto-approve
-tofu output
-docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}' | rg 'lab04-local-vm|NAMES'
+
 ```
+Outputs:
+
+app_url = "http://127.0.0.1:5000"
+container_ip = "172.18.0.2"
+container_shell_command = "docker exec -it lab04-local-vm /bin/bash"
+http_url = "http://127.0.0.1:8080"
+network_name = "lab04-local-net"
+public_ip_equivalent = "127.0.0.1"
+ssh_command = "ssh -i ~/.ssh/id_ed25519 -p 2222 devops@127.0.0.1"
+vm_name = "lab04-local-vm"
+```
+
+```
+$ ssh -i ~/.ssh/id_ed25519 -p 2222 devops@127.0.0.1 echo "SSH avaliable"
+The authenticity of host '[127.0.0.1]:2222 ([127.0.0.1]:2222)' can't be established.
+ED25519 key fingerprint is: SHA256:shGIrzMssSaR8sB9yuUyId7BYrKHyfi/OQSvGJq5gkk
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '[127.0.0.1]:2222' (ED25519) to the list of known hosts.
+SSH avaliable
+```
+
 
 ## 3. Pulumi Implementation
 
-- Pulumi CLI: `v3.x`
+- Pulumi CLI: `v3.192.0`
 - Language: Python
 - Project path: `pulumi/`
 - Resources:
@@ -59,17 +75,7 @@ docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}' | rg 'lab04-local-
 ### Command Output
 
 ```bash
-cd pulumi
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp Pulumi.dev.yaml.example Pulumi.dev.yaml
-# Verify language plugin is present:
-which pulumi-language-python || echo "Missing pulumi-language-python in PATH"
-pulumi stack init dev || true
-pulumi preview
-pulumi up --yes
-pulumi stack output
+wait a minute
 ```
 
 ## 4. Terraform vs Pulumi (Local Docker Case)

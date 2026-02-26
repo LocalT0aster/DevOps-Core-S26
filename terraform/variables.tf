@@ -10,6 +10,24 @@ variable "project_name" {
   default     = "lab04-local"
 }
 
+variable "vm_user" {
+  description = "Linux username created inside the VM-like container for SSH access."
+  type        = string
+  default     = "devops"
+}
+
+variable "ssh_public_key" {
+  description = "SSH public key allowed to access the VM-like container."
+  type        = string
+  sensitive   = true
+}
+
+variable "ssh_private_key_path" {
+  description = "Private key path used in the rendered SSH command output."
+  type        = string
+  default     = "~/.ssh/id_ed25519"
+}
+
 variable "ssh_bind_ip" {
   description = "Host IP used for SSH binding. Keep 127.0.0.1 to restrict access."
   type        = string

@@ -5,7 +5,10 @@ This Terraform project implements Lab04 with the local Docker provider instead o
 ## What It Creates
 
 - Docker network (`network/VPC` equivalent)
-- Ubuntu 24.04 container (`VM/compute` equivalent)
+- Ubuntu 24.04 container (`VM/compute` equivalent) with startup bootstrap
+  - installs and starts `openssh-server`
+  - configures SSH authorized key
+  - starts simple HTTP endpoints on ports `80` and `5000`
 - Port mappings as firewall equivalents:
   - SSH: container `22` -> host `2222` (bound to `127.0.0.1`)
   - HTTP: container `80` -> host `8080`
@@ -20,11 +23,15 @@ This Terraform project implements Lab04 with the local Docker provider instead o
 
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+# edit terraform.tfvars and set ssh_public_key
 
 cd terraform
 tofu init -plugin-dir="$HOME/.terraform.d/plugins"
 tofu plan
 tofu apply -auto-approve
+
+# verify SSH
+ssh -i ~/.ssh/id_ed25519 -p 2222 devops@127.0.0.1 'echo SSH_OK'
 ```
 
 If provider download is blocked, manually place provider binaries under:

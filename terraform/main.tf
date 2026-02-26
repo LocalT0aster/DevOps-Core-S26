@@ -3,7 +3,8 @@ provider "docker" {
 }
 
 locals {
-  vm_name = "${var.project_name}-vm"
+  vm_name          = "${var.project_name}-vm"
+  bootstrap_script = file("${path.module}/../docker/provision_vm.sh")
 
   default_labels = {
     lab        = "04"
@@ -37,7 +38,12 @@ resource "docker_container" "vm" {
   image    = docker_image.vm_image.image_id
   hostname = local.vm_name
   restart  = "unless-stopped"
-  command  = ["/bin/bash", "-lc", "while true; do sleep 3600; done"]
+  command  = ["/bin/bash", "-lc", local.bootstrap_script]
+
+  env = [
+    "VM_USER=${var.vm_user}",
+    "SSH_PUBLIC_KEY=${var.ssh_public_key}",
+  ]
 
   networks_advanced {
     name    = docker_network.lab04.name
