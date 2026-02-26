@@ -1,0 +1,4 @@
+name: lab04-local-docker
+runtime:
+  name: python
+description: Lab04 IaC using Pulumi with local Docker provider.

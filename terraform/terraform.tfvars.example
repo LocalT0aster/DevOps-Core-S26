@@ -1,0 +1,9 @@
+# Optional overrides:
+# ssh_host_port        = 2222
+# http_host_port       = 8080
+# app_host_port        = 5000
+# ssh_bind_ip          = "127.0.0.1"
+# public_bind_ip       = "0.0.0.0"
+# extra_labels = {
+#   owner = "your-name"
+# }
