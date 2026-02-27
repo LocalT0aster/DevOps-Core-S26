@@ -1,0 +1,13 @@
+ssh_public_key = "ssh-ed25519 AAAA... your-user@host"
+
+# Optional overrides:
+# vm_user              = "devops"
+# ssh_private_key_path = "~/.ssh/id_ed25519"
+# ssh_host_port        = 2222
+# http_host_port       = 80
+# app_host_port        = 5000
+# ssh_bind_ip          = "127.0.0.1"
+# public_bind_ip       = "0.0.0.0"
+# extra_labels = {
+#   owner = "your-name"
+# }
