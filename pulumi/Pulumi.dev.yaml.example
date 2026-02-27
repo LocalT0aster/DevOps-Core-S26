@@ -6,5 +6,5 @@ config:
   lab04-local-docker:sshBindIp: 127.0.0.1
   lab04-local-docker:publicBindIp: 0.0.0.0
   lab04-local-docker:sshHostPort: "2222"
-  lab04-local-docker:httpHostPort: "8080"
+  lab04-local-docker:httpHostPort: "80"
   lab04-local-docker:appHostPort: "5000"

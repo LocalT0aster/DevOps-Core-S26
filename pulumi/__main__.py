@@ -25,7 +25,7 @@ public_bind_ip: str = config.get("publicBindIp") or "0.0.0.0"
 
 ports = HostPorts(
     ssh=config.get_int("sshHostPort") or 2222,
-    http=config.get_int("httpHostPort") or 8080,
+    http=config.get_int("httpHostPort") or 80,
     app=config.get_int("appHostPort") or 5000,
 )
 

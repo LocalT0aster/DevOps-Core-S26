@@ -54,7 +54,7 @@ variable "ssh_host_port" {
 variable "http_host_port" {
   description = "Host port mapped to container port 80."
   type        = number
-  default     = 8080
+  default     = 80
 
   validation {
     condition     = var.http_host_port >= 1 && var.http_host_port <= 65535
