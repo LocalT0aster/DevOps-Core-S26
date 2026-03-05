@@ -5,8 +5,7 @@ if [ $(id -u) -ne 0 ]; then
 fi
 rm /etc/apt/sources.list.d/cappelikan.sources /etc/apt/sources.list.d/home-alvistack.sources
 apt-get update
-apt purge -y ansible mainline
-apt autopurge -y
-apt-get upgrade
-apt-get install ansible
-reboot
+apt-get purge -y --allow-change-held-packages ansible mainline sosreport
+# upgrade kernel
+apt-get autoremove -y --allow-change-held-packages
+apt full-upgrade -y

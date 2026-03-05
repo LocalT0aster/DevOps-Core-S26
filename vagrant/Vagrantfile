@@ -2,13 +2,52 @@ Vagrant.configure("2") do |config|
   config.vm.box = "alvistack/ubuntu-24.04"
   config.vm.box_check_update = false
   config.vm.hostname = "devops-core-s26"
+  vm_ip = ENV.fetch("VM_IP", "192.168.121.50")
+
+  host_ssh_key = File.expand_path("~/.ssh/vagrant")
+  host_ssh_pub = "#{host_ssh_key}.pub"
+
+  # Prefer host key for SSH, but keep Vagrant's insecure key as a fallback.
+  config.ssh.insert_key = false
+  config.ssh.private_key_path = [
+    host_ssh_key,
+    File.expand_path("~/.vagrant.d/insecure_private_key")
+  ]
 
   # Keep project root available in the guest for labs and tooling.
   config.vm.synced_folder ".", "/vagrant", disabled: true
   config.vm.synced_folder "./shared", "/shared"
+  config.vm.network "private_network", ip: vm_ip
 
-  # Run local bootstrap script automatically during `vagrant up`.
-  config.vm.provision "shell", path: "shared/provision.sh"
+  # Install host public key for `vagrant` user access.
+  if File.exist?(host_ssh_pub)
+    config.vm.provision "file", source: host_ssh_pub, destination: "/tmp/vagrant.pub"
+    config.vm.provision "shell",
+      name: "install-host-ssh-key",
+      inline: <<-SHELL
+        set -euo pipefail
+        if [ ! -f /tmp/vagrant.pub ]; then
+          echo "Skipping host SSH key install: /tmp/vagrant.pub not found."
+          exit 0
+        fi
+        install -d -m 700 /home/vagrant/.ssh
+        touch /home/vagrant/.ssh/authorized_keys
+        pub_key="$(cat /tmp/vagrant.pub)"
+        grep -qxF "$pub_key" /home/vagrant/.ssh/authorized_keys || echo "$pub_key" >> /home/vagrant/.ssh/authorized_keys
+        chown -R vagrant:vagrant /home/vagrant/.ssh
+        chmod 700 /home/vagrant/.ssh
+        chmod 600 /home/vagrant/.ssh/authorized_keys
+        rm -f /tmp/vagrant.pub
+      SHELL
+  end
+
+  # Stage 1: update/purge packages, including kernel changes.
+  config.vm.provision "shell",
+    name: "kernel-update",
+    path: "shared/provision.sh",
+    reboot: true
+  # Stage 2: post-reboot setup.
+  config.vm.provision "shell", name: "post-kernel", path: "shared/provision-post-kernel.sh"
 
   config.vm.provider :libvirt do |libvirt|
     libvirt.cpus = ENV.fetch("VM_CPUS", "2").to_i
