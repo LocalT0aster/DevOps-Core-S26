@@ -1,0 +1,11 @@
+name: lab04-local-docker
+description: IaC using Pulumi with local Docker provider.
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: python
