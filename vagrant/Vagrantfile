@@ -1,0 +1,17 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "alvistack/ubuntu-24.04"
+  config.vm.box_check_update = false
+  config.vm.hostname = "devops-core-s26"
+
+  # Keep project root available in the guest for labs and tooling.
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+  config.vm.synced_folder "./shared", "/shared"
+
+  # Run local bootstrap script automatically during `vagrant up`.
+  config.vm.provision "shell", path: "shared/provision.sh"
+
+  config.vm.provider :libvirt do |libvirt|
+    libvirt.cpus = ENV.fetch("VM_CPUS", "2").to_i
+    libvirt.memory = ENV.fetch("VM_MEMORY", "4096").to_i
+  end
+end
