@@ -1,0 +1,27 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install common packages
+  ansible.builtin.apt:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Set /etc/timezone
+  ansible.builtin.copy:
+    dest: /etc/timezone
+    content: "{{ common_timezone }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+  when: common_manage_timezone | bool
+
+- name: Point /etc/localtime to selected timezone
+  ansible.builtin.file:
+    src: "/usr/share/zoneinfo/{{ common_timezone }}"
+    dest: /etc/localtime
+    state: link
+    force: true
+  when: common_manage_timezone | bool
