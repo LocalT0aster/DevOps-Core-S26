@@ -1,0 +1,14 @@
+---
+- name: Deploy application
+  hosts: webservers
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Run app deploy role tasks/defaults/handlers
+      ansible.builtin.include_role:
+        name: app_deploy
+        tasks_from: app_deploy_tasks
+        defaults_from: app_deploy_defaults
+        handlers_from: app_deploy_handlers
