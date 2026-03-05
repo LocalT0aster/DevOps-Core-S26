@@ -6,3 +6,4 @@
 # *.log
 shared/**
 !shared/provision.sh
+!shared/provision-post-kernel.sh
