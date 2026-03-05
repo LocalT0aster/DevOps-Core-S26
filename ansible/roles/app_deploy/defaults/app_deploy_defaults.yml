@@ -11,7 +11,6 @@ app_restart_policy: unless-stopped
 app_environment:
   HOST: "0.0.0.0"
   PORT: "{{ app_container_internal_port | string }}"
-app_container_command: "gunicorn --bind 0.0.0.0:{{ app_container_internal_port }} src.main:app"
 
 app_healthcheck_path: /health
 app_healthcheck_retries: 20
