@@ -108,6 +108,15 @@ jobs:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
           known-host: ${{ env.TARGET_VM_HOST }}
 
+      - name: Prepare vault password file
+        working-directory: ${{ env.ANSIBLE_DIRECTORY }}
+        env:
+          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$VAULT_PASSWORD" > .vault_pass
+
       - name: Verify target connectivity
         working-directory: ${{ env.ANSIBLE_DIRECTORY }}
         run: ansible webservers -m ansible.builtin.ping
@@ -132,3 +141,8 @@ jobs:
         uses: ./.github/actions/http-healthcheck
         with:
           url: http://${{ env.TARGET_VM_HOST }}:5000/health
+
+      - name: Remove vault password file
+        if: always()
+        working-directory: ${{ env.ANSIBLE_DIRECTORY }}
+        run: rm -f .vault_pass
