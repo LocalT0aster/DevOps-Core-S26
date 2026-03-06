@@ -1,3 +1,34 @@
 ---
-- import_playbook: provision.yml
-- import_playbook: deploy.yml
+- name: Provision and deploy application
+  hosts: webservers
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+
+  tasks:
+    - name: Run common role tasks/defaults
+      ansible.builtin.include_role:
+        name: common
+        tasks_from: common_tasks
+        defaults_from: common_defaults
+        apply:
+          tags:
+            - common
+      tags:
+        - common
+        - packages
+        - users
+
+    - name: Run web app role
+      ansible.builtin.include_role:
+        name: web_app
+        tasks_from: web_app_tasks
+        defaults_from: web_app_defaults
+        apply:
+          tags:
+            - web_app
+      tags:
+        - web_app
+        - app_deploy
+        - compose
+        - web_app_wipe

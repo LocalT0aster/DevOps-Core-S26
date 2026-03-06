@@ -1,0 +1,147 @@
+name: Ansible Deployment
+
+on:
+  push:
+    branches:
+      - master
+      - "lab*"
+    paths:
+      - ansible/**
+      - .github/actions/ansible-setup/**
+      - .github/actions/ansible-lint/**
+      - .github/actions/ansible-ssh-setup/**
+      - .github/actions/ansible-deploy/**
+      - .github/actions/http-healthcheck/**
+      - .github/workflows/ansible-deploy.yml
+      - "!ansible/docs/**"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - ansible/**
+      - .github/actions/ansible-setup/**
+      - .github/actions/ansible-lint/**
+      - .github/actions/ansible-ssh-setup/**
+      - .github/actions/ansible-deploy/**
+      - .github/actions/http-healthcheck/**
+      - .github/workflows/ansible-deploy.yml
+      - "!ansible/docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ansible-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANSIBLE_DIRECTORY: ansible
+  DEPLOY_PLAYBOOK: playbooks/deploy.yml
+  DEPLOY_TAGS: app_deploy
+
+jobs:
+  lint:
+    name: Ansible Lint
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Ansible toolchain
+        uses: ./.github/actions/ansible-setup
+
+      - name: Run lint and syntax checks
+        uses: ./.github/actions/ansible-lint
+        with:
+          ansible-directory: ${{ env.ANSIBLE_DIRECTORY }}
+          vault-password: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+
+  deploy:
+    name: Deploy Application
+    needs: lint
+    if: github.event_name != 'pull_request'
+    runs-on:
+      - self-hosted
+      - linux
+      - vagrant
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Ansible toolchain
+        uses: ./.github/actions/ansible-setup
+
+      - name: Resolve target host from inventory
+        working-directory: ${{ env.ANSIBLE_DIRECTORY }}
+        run: |
+          set -euo pipefail
+          target_host="$(
+            awk '
+              /^[[:space:]]*#/ { next }
+              /^\[/ { next }
+              NF {
+                for (i = 1; i <= NF; i++) {
+                  if ($i ~ /^ansible_host=/) {
+                    split($i, value, "=")
+                    print value[2]
+                    exit
+                  }
+                }
+              }
+            ' inventory/hosts.ini
+          )"
+
+          if [ -z "$target_host" ]; then
+            echo "Could not determine ansible_host from inventory/hosts.ini" >&2
+            exit 1
+          fi
+
+          echo "TARGET_VM_HOST=$target_host" >> "$GITHUB_ENV"
+
+      - name: Configure SSH access to the target VM
+        uses: ./.github/actions/ansible-ssh-setup
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known-host: ${{ env.TARGET_VM_HOST }}
+
+      - name: Prepare vault password file
+        working-directory: ${{ env.ANSIBLE_DIRECTORY }}
+        env:
+          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s\n' "$VAULT_PASSWORD" > .vault_pass
+
+      - name: Verify target connectivity
+        working-directory: ${{ env.ANSIBLE_DIRECTORY }}
+        run: ansible webservers -m ansible.builtin.ping
+
+      - id: deploy
+        name: Deploy web application
+        uses: ./.github/actions/ansible-deploy
+        with:
+          ansible-directory: ${{ env.ANSIBLE_DIRECTORY }}
+          playbook-path: ${{ env.DEPLOY_PLAYBOOK }}
+          vault-password: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+          tags: ${{ env.DEPLOY_TAGS }}
+
+      - name: Upload deployment log
+        if: always() && steps.deploy.outputs.log-path != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ansible-deploy-log
+          path: ${{ steps.deploy.outputs.log-path }}
+
+      - name: Verify application health
+        uses: ./.github/actions/http-healthcheck
+        with:
+          url: http://${{ env.TARGET_VM_HOST }}:5000/health
+
+      - name: Remove vault password file
+        if: always()
+        working-directory: ${{ env.ANSIBLE_DIRECTORY }}
+        run: rm -f .vault_pass

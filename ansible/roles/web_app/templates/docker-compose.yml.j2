@@ -1,0 +1,21 @@
+services:
+  {{ web_app_service_name }}:
+    image: "{{ web_app_image }}:{{ web_app_image_tag }}"
+    container_name: "{{ web_app_container_name }}"
+{% if web_app_container_command | length > 0 %}
+    command: "{{ web_app_container_command }}"
+{% endif %}
+    ports:
+      - "{{ web_app_port }}:{{ web_app_internal_port }}"
+    environment:
+{% for env_name, env_value in web_app_environment | dictsort %}
+      {{ env_name }}: "{{ env_value }}"
+{% endfor %}
+    restart: "{{ web_app_restart_policy }}"
+    networks:
+      - web_app_network
+
+networks:
+  web_app_network:
+    name: "{{ web_app_network_name }}"
+    driver: bridge

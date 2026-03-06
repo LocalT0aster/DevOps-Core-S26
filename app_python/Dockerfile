@@ -20,4 +20,4 @@ ENV PORT=5000
 ENV HOST="0.0.0.0"
 
 USER appuser
-CMD ["sh", "-c", "gunicorn --bind ${HOST:-0.0.0.0}:${PORT:-5000} src.flask_instance:app"]
+CMD ["sh", "-c", "gunicorn --bind ${HOST:-0.0.0.0}:${PORT:-5000} src.main:app"]

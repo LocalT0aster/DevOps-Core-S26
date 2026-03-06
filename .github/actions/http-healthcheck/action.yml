@@ -1,0 +1,50 @@
+name: HTTP Healthcheck
+description: Poll an HTTP endpoint until it returns healthy JSON
+
+inputs:
+  url:
+    description: URL to poll
+    required: true
+  retries:
+    description: Number of polling attempts before failure
+    required: false
+    default: "10"
+  delay-seconds:
+    description: Delay between retries in seconds
+    required: false
+    default: "3"
+  jq-filter:
+    description: jq expression that must evaluate to true
+    required: false
+    default: '.status == "healthy"'
+
+runs:
+  using: composite
+  steps:
+    - name: Poll health endpoint
+      shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        RETRIES: ${{ inputs.retries }}
+        DELAY_SECONDS: ${{ inputs.delay-seconds }}
+        JQ_FILTER: ${{ inputs.jq-filter }}
+      run: |
+        set -euo pipefail
+
+        response=""
+
+        for attempt in $(seq 1 "$RETRIES"); do
+          if response="$(curl -fsSL "$URL")"; then
+            break
+          fi
+
+          if [ "$attempt" -eq "$RETRIES" ]; then
+            echo "Health check failed after $RETRIES attempts: $URL" >&2
+            exit 1
+          fi
+
+          sleep "$DELAY_SECONDS"
+        done
+
+        echo "$response" | jq .
+        echo "$response" | jq -e "$JQ_FILTER" >/dev/null
