@@ -31,3 +31,4 @@
         - web_app
         - app_deploy
         - compose
+        - web_app_wipe

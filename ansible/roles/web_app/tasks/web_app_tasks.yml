@@ -1,4 +1,14 @@
 ---
+- name: Include web app wipe tasks
+  ansible.builtin.include_tasks:
+    file: wipe.yml
+    apply:
+      tags:
+        - web_app_wipe
+  tags:
+    - always
+    - web_app_wipe
+
 - name: Deploy web application with Docker Compose
   become: true
   tags:
