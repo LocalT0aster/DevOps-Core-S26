@@ -1,0 +1,37 @@
+---
+web_app_registry_username: "{{ dockerhub_username | default('') }}"
+web_app_registry_password: "{{ dockerhub_password | default(docker_api_token | default('')) }}"
+
+web_app_name: "{{ app_name | default('devops-app-py') }}"
+web_app_service_name: "{{ web_app_name }}"
+web_app_image: >-
+  {{ docker_image | default((web_app_registry_username ~ '/' ~ web_app_name)
+  if web_app_registry_username | length > 0 else web_app_name) }}
+web_app_image_tag: "{{ docker_tag | default(docker_image_tag | default('latest')) }}"
+
+web_app_port: "{{ app_port | default(5000) }}"
+web_app_container_name: "{{ app_container_name | default(web_app_name) }}"
+web_app_internal_port: "{{ app_internal_port | default(app_container_internal_port | default(web_app_port)) }}"
+web_app_restart_policy: "{{ app_restart_policy | default('unless-stopped') }}"
+
+web_app_environment: >-
+  {{ {'HOST': '0.0.0.0', 'PORT': (web_app_internal_port | string)}
+  | combine(app_environment | default({})) }}
+
+web_app_healthcheck_path: "{{ app_healthcheck_path | default('/health') }}"
+web_app_healthcheck_retries: "{{ app_healthcheck_retries | default(20) }}"
+web_app_healthcheck_delay: "{{ app_healthcheck_delay | default(3) }}"
+web_app_healthcheck_timeout: "{{ app_healthcheck_timeout | default(3) }}"
+web_app_healthcheck_host: "{{ app_healthcheck_host | default(ansible_host | default(inventory_hostname)) }}"
+web_app_healthcheck_delegate_to: "{{ app_healthcheck_delegate_to | default('localhost') }}"
+
+web_app_compose_version: "{{ docker_compose_version | default('3.8') }}"
+web_app_compose_project_dir: "{{ compose_project_dir | default('/opt/' ~ web_app_name) }}"
+web_app_compose_file_name: "docker-compose.yml"
+web_app_compose_pull_policy: "{{ app_compose_pull_policy | default('always') }}"
+web_app_compose_recreate: "{{ app_compose_recreate | default('auto') }}"
+web_app_compose_wait: "{{ app_compose_wait | default(true) }}"
+web_app_compose_wait_timeout: "{{ app_compose_wait_timeout | default(60) }}"
+web_app_compose_remove_orphans: "{{ app_compose_remove_orphans | default(true) }}"
+web_app_network_name: "{{ web_app_name }}-network"
+web_app_container_command: "{{ app_container_command | default('') }}"
