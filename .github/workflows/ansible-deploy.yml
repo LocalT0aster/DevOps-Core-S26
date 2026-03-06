@@ -3,8 +3,8 @@ name: Ansible Deployment
 on:
   push:
     branches:
-      - main
       - master
+      - "lab*"
     paths:
       - ansible/**
       - .github/actions/ansible-setup/**
@@ -16,7 +16,6 @@ on:
       - "!ansible/docs/**"
   pull_request:
     branches:
-      - main
       - master
     paths:
       - ansible/**
