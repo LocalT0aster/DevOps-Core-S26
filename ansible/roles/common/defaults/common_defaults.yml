@@ -11,3 +11,9 @@ common_packages:
 
 common_manage_timezone: true
 common_timezone: "Etc/UTC"
+common_completion_log_path: "/tmp/ansible-common-role.log"
+
+common_managed_users:
+  - name: "{{ ansible_user | default('ubuntu') }}"
+    shell: "/bin/bash"
+    create_home: true

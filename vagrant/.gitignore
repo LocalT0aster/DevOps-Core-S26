@@ -7,3 +7,6 @@
 shared/**
 !shared/provision.sh
 !shared/provision-post-kernel.sh
+!shared/provision-gh-runner.sh
+!shared/provision-gh-runner-register.sh
+!shared/github-runner.env.example

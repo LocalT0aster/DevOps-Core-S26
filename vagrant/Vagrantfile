@@ -1,56 +1,100 @@
 Vagrant.configure("2") do |config|
-  config.vm.box = "alvistack/ubuntu-24.04"
-  config.vm.box_check_update = false
-  config.vm.hostname = "devops-core-s26"
-  vm_ip = ENV.fetch("VM_IP", "192.168.121.50")
+  box_name = "alvistack/ubuntu-24.04"
+  target_vm_ip = ENV.fetch("VM_IP", "192.168.121.50")
+  runner_vm_ip = ENV.fetch("RUNNER_VM_IP", "192.168.121.51")
 
   host_ssh_key = File.expand_path("~/.ssh/vagrant")
   host_ssh_pub = "#{host_ssh_key}.pub"
+  fallback_ssh_key = File.expand_path("~/.vagrant.d/insecure_private_key")
 
-  # Prefer host key for SSH, but keep Vagrant's insecure key as a fallback.
-  config.ssh.insert_key = false
-  config.ssh.private_key_path = [
-    host_ssh_key,
-    File.expand_path("~/.vagrant.d/insecure_private_key")
-  ]
+  runner_env = {
+    "GH_RUNNER_VERSION" => ENV.fetch("GH_RUNNER_VERSION", ""),
+    "GH_RUNNER_URL" => ENV.fetch("GH_RUNNER_URL", ""),
+    "GH_RUNNER_TOKEN" => ENV.fetch("GH_RUNNER_TOKEN", ""),
+    "GH_RUNNER_NAME" => ENV.fetch("GH_RUNNER_NAME", ""),
+    "GH_RUNNER_LABELS" => ENV.fetch("GH_RUNNER_LABELS", ""),
+    "GH_RUNNER_GROUP" => ENV.fetch("GH_RUNNER_GROUP", ""),
+    "GH_RUNNER_WORKDIR" => ENV.fetch("GH_RUNNER_WORKDIR", ""),
+    "GH_RUNNER_DISABLE_UPDATE" => ENV.fetch("GH_RUNNER_DISABLE_UPDATE", "")
+  }
 
-  # Keep project root available in the guest for labs and tooling.
-  config.vm.synced_folder ".", "/vagrant", disabled: true
-  config.vm.synced_folder "./shared", "/shared"
-  config.vm.network "private_network", ip: vm_ip
+  configure_common_vm = lambda do |machine, hostname:, ip:, cpus:, memory:|
+    machine.vm.box = box_name
+    machine.vm.box_check_update = false
+    machine.vm.hostname = hostname
 
-  # Install host public key for `vagrant` user access.
-  if File.exist?(host_ssh_pub)
-    config.vm.provision "file", source: host_ssh_pub, destination: "/tmp/vagrant.pub"
-    config.vm.provision "shell",
-      name: "install-host-ssh-key",
-      inline: <<-SHELL
-        set -euo pipefail
-        if [ ! -f /tmp/vagrant.pub ]; then
-          echo "Skipping host SSH key install: /tmp/vagrant.pub not found."
-          exit 0
-        fi
-        install -d -m 700 /home/vagrant/.ssh
-        touch /home/vagrant/.ssh/authorized_keys
-        pub_key="$(cat /tmp/vagrant.pub)"
-        grep -qxF "$pub_key" /home/vagrant/.ssh/authorized_keys || echo "$pub_key" >> /home/vagrant/.ssh/authorized_keys
-        chown -R vagrant:vagrant /home/vagrant/.ssh
-        chmod 700 /home/vagrant/.ssh
-        chmod 600 /home/vagrant/.ssh/authorized_keys
-        rm -f /tmp/vagrant.pub
-      SHELL
+    machine.ssh.insert_key = false
+    machine.ssh.private_key_path = [host_ssh_key, fallback_ssh_key]
+
+    machine.vm.synced_folder ".", "/vagrant", disabled: true
+    machine.vm.synced_folder "./shared", "/shared"
+    machine.vm.network "private_network", ip: ip
+
+    if File.exist?(host_ssh_pub)
+      machine.vm.provision "file", source: host_ssh_pub, destination: "/tmp/vagrant.pub"
+      machine.vm.provision "shell",
+        name: "install-host-ssh-key",
+        inline: <<-SHELL
+          set -euo pipefail
+          if [ ! -f /tmp/vagrant.pub ]; then
+            echo "Skipping host SSH key install: /tmp/vagrant.pub not found."
+            exit 0
+          fi
+          install -d -m 700 /home/vagrant/.ssh
+          touch /home/vagrant/.ssh/authorized_keys
+          pub_key="$(cat /tmp/vagrant.pub)"
+          grep -qxF "$pub_key" /home/vagrant/.ssh/authorized_keys || echo "$pub_key" >> /home/vagrant/.ssh/authorized_keys
+          chown -R vagrant:vagrant /home/vagrant/.ssh
+          chmod 700 /home/vagrant/.ssh
+          chmod 600 /home/vagrant/.ssh/authorized_keys
+          rm -f /tmp/vagrant.pub
+        SHELL
+    end
+
+    machine.vm.provider :libvirt do |libvirt|
+      libvirt.cpus = cpus.to_i
+      libvirt.memory = memory.to_i
+    end
   end
 
-  # Stage 1: update/purge packages, including kernel changes.
-  config.vm.provision "shell",
-    name: "kernel-update",
-    path: "shared/provision.sh",
-    reboot: true
-  # Stage 2: post-reboot setup.
-  config.vm.provision "shell", name: "post-kernel", path: "shared/provision-post-kernel.sh"
+  config.vm.define "default", primary: true do |target|
+    configure_common_vm.call(
+      target,
+      hostname: "devops-core-s26",
+      ip: target_vm_ip,
+      cpus: ENV.fetch("VM_CPUS", "2"),
+      memory: ENV.fetch("VM_MEMORY", "2048")
+    )
 
-  config.vm.provider :libvirt do |libvirt|
-    libvirt.cpus = ENV.fetch("VM_CPUS", "2").to_i
-    libvirt.memory = ENV.fetch("VM_MEMORY", "4096").to_i
+    target.vm.provision "shell",
+      name: "kernel-update",
+      path: "shared/provision.sh",
+      reboot: true
+    target.vm.provision "shell", name: "post-kernel", path: "shared/provision-post-kernel.sh"
+  end
+
+  config.vm.define "github-runner", autostart: false do |runner|
+    configure_common_vm.call(
+      runner,
+      hostname: "github-runner-s26",
+      ip: runner_vm_ip,
+      cpus: ENV.fetch("RUNNER_VM_CPUS", "2"),
+      memory: ENV.fetch("RUNNER_VM_MEMORY", "2048")
+    )
+
+    runner.vm.provision "shell",
+      name: "kernel-update",
+      path: "shared/provision.sh",
+      reboot: true
+    runner.vm.provision "shell", name: "post-kernel", path: "shared/provision-post-kernel.sh"
+    runner.vm.provision "shell",
+      name: "github-runner-base",
+      path: "shared/provision-gh-runner.sh",
+      env: runner_env
+    runner.vm.provision "shell",
+      name: "github-runner-register",
+      path: "shared/provision-gh-runner-register.sh",
+      env: runner_env,
+      run: "never"
   end
 end
