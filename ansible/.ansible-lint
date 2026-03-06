@@ -1,0 +1,14 @@
+---
+profile: production
+strict: true
+use_default_rules: true
+exclude_paths:
+  - .venv/
+  - .ansible/
+  - group_vars/all.yml
+  - docs/LAB05.md
+enable_list:
+  - args
+  - empty-string-compare
+  - no-log-password
+  - no-prompting

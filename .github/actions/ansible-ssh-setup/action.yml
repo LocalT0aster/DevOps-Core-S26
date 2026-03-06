@@ -1,0 +1,41 @@
+name: Ansible SSH Setup
+description: Install the SSH key material required for Ansible access
+
+inputs:
+  ssh-private-key:
+    description: Private SSH key used to connect to the target VM
+    required: true
+  ssh-key-path:
+    description: Destination path for the private key
+    required: false
+    default: "~/.ssh/vagrant"
+  known-host:
+    description: Optional host to add to known_hosts
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Configure SSH credentials
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        SSH_KEY_PATH: ${{ inputs.ssh-key-path }}
+        KNOWN_HOST: ${{ inputs.known-host }}
+      run: |
+        set -euo pipefail
+
+        key_path="${SSH_KEY_PATH/#\~/$HOME}"
+
+        install -d -m 700 "$HOME/.ssh"
+        install -d -m 700 "$(dirname "$key_path")"
+        printf '%s\n' "$SSH_PRIVATE_KEY" > "$key_path"
+        chmod 600 "$key_path"
+
+        touch "$HOME/.ssh/known_hosts"
+        chmod 600 "$HOME/.ssh/known_hosts"
+
+        if [ -n "$KNOWN_HOST" ]; then
+          ssh-keyscan -H "$KNOWN_HOST" >> "$HOME/.ssh/known_hosts" 2>/dev/null || true
+        fi

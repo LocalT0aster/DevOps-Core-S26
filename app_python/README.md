@@ -37,9 +37,9 @@ poetry install
 Production-style local run with Gunicorn:
 
 ```bash
-poetry run gunicorn --bind 0.0.0.0:5000 src.flask_instance:app
+poetry run gunicorn --bind 0.0.0.0:5000 src.main:app
 # Or with custom config
-HOST=127.0.0.1 PORT=8080 poetry run gunicorn --bind 127.0.0.1:8080 src.flask_instance:app
+HOST=127.0.0.1 PORT=8080 poetry run gunicorn --bind 127.0.0.1:8080 src.main:app
 ```
 
 ### Docker

@@ -9,10 +9,22 @@
         name: common
         tasks_from: common_tasks
         defaults_from: common_defaults
+        apply:
+          tags:
+            - common
+      tags:
+        - common
+        - packages
+        - users
 
     - name: Run docker role tasks/defaults/handlers
       ansible.builtin.include_role:
         name: docker
-        tasks_from: docker_tasks
         defaults_from: docker_defaults
-        handlers_from: docker_handlers
+        apply:
+          tags:
+            - docker
+      tags:
+        - docker
+        - docker_install
+        - docker_config

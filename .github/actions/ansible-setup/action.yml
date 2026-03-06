@@ -1,0 +1,59 @@
+name: Ansible Setup
+description: Set up a Python-based Ansible toolchain and required collections
+
+inputs:
+  python-version:
+    description: Python version to install
+    required: false
+    default: "3.12"
+  working-directory:
+    description: Directory containing the Ansible project
+    required: false
+    default: "ansible"
+  python-requirements-path:
+    description: Path to the pip requirements file
+    required: false
+    default: "ansible/requirements-ci.txt"
+  collection-requirements-path:
+    description: Path to the ansible-galaxy requirements file
+    required: false
+    default: "ansible/requirements.yml"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Cache Ansible toolchain
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pip
+          ~/.ansible/collections
+        key: ${{ runner.os }}-py${{ inputs.python-version }}-ansible-${{ hashFiles(inputs.python-requirements-path, inputs.collection-requirements-path) }}
+        restore-keys: |
+          ${{ runner.os }}-py${{ inputs.python-version }}-ansible-
+
+    - name: Install Python dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        rm -rf "${{ inputs.working-directory }}/.venv-ci"
+        python -m venv "${{ inputs.working-directory }}/.venv-ci"
+        . "${{ inputs.working-directory }}/.venv-ci/bin/activate"
+        python -m pip install --upgrade pip
+        python -m pip install -r "${{ inputs.python-requirements-path }}"
+
+    - name: Install Ansible collections
+      shell: bash
+      run: |
+        set -euo pipefail
+        . "${{ inputs.working-directory }}/.venv-ci/bin/activate"
+        ansible-galaxy collection install -r "${{ inputs.collection-requirements-path }}"
+
+    - name: Add Ansible venv to PATH
+      shell: bash
+      run: echo "${{ github.workspace }}/${{ inputs.working-directory }}/.venv-ci/bin" >> "$GITHUB_PATH"

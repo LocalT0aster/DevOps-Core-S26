@@ -16,3 +16,4 @@ docker_packages:
 
 docker_user: "{{ ansible_user | default('ubuntu') }}"
 docker_install_python_sdk: true
+docker_completion_log_path: "/tmp/ansible-docker-role.log"
