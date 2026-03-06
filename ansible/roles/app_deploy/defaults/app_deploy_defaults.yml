@@ -1,21 +1,26 @@
 ---
-app_name: devops-app-py
-docker_image: "{{ dockerhub_username }}/{{ app_name }}"
-docker_image_tag: latest
+app_deploy_dockerhub_username: "{{ dockerhub_username | default('') }}"
+app_deploy_dockerhub_password: "{{ dockerhub_password | default(docker_api_token | default('')) }}"
 
-app_port: 5000
-app_container_name: devops-app
-app_container_internal_port: 5000
-app_restart_policy: unless-stopped
+app_deploy_name: "{{ app_name | default('devops-app-py') }}"
+app_deploy_docker_image: >-
+  {{ docker_image | default((app_deploy_dockerhub_username ~ '/' ~ app_deploy_name)
+  if app_deploy_dockerhub_username | length > 0 else app_deploy_name) }}
+app_deploy_docker_image_tag: "{{ docker_image_tag | default('latest') }}"
 
-app_environment:
-  HOST: "0.0.0.0"
-  PORT: "{{ app_container_internal_port | string }}"
+app_deploy_port: "{{ app_port | default(5000) }}"
+app_deploy_container_name: "{{ app_container_name | default('devops-app') }}"
+app_deploy_container_internal_port: "{{ app_container_internal_port | default(5000) }}"
+app_deploy_restart_policy: "{{ app_restart_policy | default('unless-stopped') }}"
 
-app_healthcheck_path: /health
-app_healthcheck_retries: 20
-app_healthcheck_delay: 3
-app_healthcheck_timeout: 3
-app_recreate_on_pull: true
-app_healthcheck_host: "{{ ansible_host | default(inventory_hostname) }}"
-app_healthcheck_delegate_to: localhost
+app_deploy_environment: >-
+  {{ app_environment | default({'HOST': '0.0.0.0',
+  'PORT': (app_deploy_container_internal_port | string)}) }}
+
+app_deploy_healthcheck_path: "{{ app_healthcheck_path | default('/health') }}"
+app_deploy_healthcheck_retries: "{{ app_healthcheck_retries | default(20) }}"
+app_deploy_healthcheck_delay: "{{ app_healthcheck_delay | default(3) }}"
+app_deploy_healthcheck_timeout: "{{ app_healthcheck_timeout | default(3) }}"
+app_deploy_recreate_on_pull: "{{ app_recreate_on_pull | default(true) }}"
+app_deploy_healthcheck_host: "{{ app_healthcheck_host | default(ansible_host | default(inventory_hostname)) }}"
+app_deploy_healthcheck_delegate_to: "{{ app_healthcheck_delegate_to | default('localhost') }}"
