@@ -1,0 +1,10 @@
+---
+dependencies:
+  - role: docker
+    tags:
+      - docker
+      - docker_install
+      - docker_config
+      - web_app
+      - app_deploy
+      - compose

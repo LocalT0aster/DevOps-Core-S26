@@ -1,0 +1,107 @@
+---
+- name: Deploy web application with Docker Compose
+  become: true
+  tags:
+    - web_app
+    - app_deploy
+    - compose
+  block:
+    - name: Log in to Docker Hub when credentials are available
+      community.docker.docker_login:
+        registry_url: https://index.docker.io/v1/
+        username: "{{ web_app_registry_username }}"
+        password: "{{ web_app_registry_password }}"
+      no_log: true
+      when:
+        - web_app_registry_username | string | length > 0
+        - web_app_registry_password | string | length > 0
+
+    - name: Ensure Compose project directory exists
+      ansible.builtin.file:
+        path: "{{ web_app_compose_project_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Check for legacy standalone container
+      community.docker.docker_container_info:
+        name: "{{ web_app_container_name }}"
+      register: web_app_legacy_container
+
+    - name: Remove legacy standalone container before Compose migration
+      community.docker.docker_container:
+        name: "{{ web_app_container_name }}"
+        state: absent
+      when:
+        - web_app_legacy_container.exists | bool
+        - web_app_legacy_container.container is defined
+        - "'com.docker.compose.project' not in (web_app_legacy_container.container.Config.Labels | default({}))"
+
+    - name: Template Docker Compose configuration
+      ansible.builtin.template:
+        src: docker-compose.yml.j2
+        dest: "{{ web_app_compose_project_dir }}/{{ web_app_compose_file_name }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Deploy application stack with Docker Compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ web_app_compose_project_dir }}"
+        files:
+          - "{{ web_app_compose_file_name }}"
+        pull: "{{ web_app_compose_pull_policy }}"
+        recreate: "{{ web_app_compose_recreate }}"
+        remove_orphans: "{{ web_app_compose_remove_orphans | bool }}"
+        state: present
+        wait: "{{ web_app_compose_wait | bool }}"
+        wait_timeout: "{{ web_app_compose_wait_timeout | int }}"
+      register: web_app_compose_result
+      retries: 3
+      delay: 10
+      until: web_app_compose_result is succeeded
+
+    - name: Wait for application port
+      ansible.builtin.wait_for:
+        host: "{{ web_app_healthcheck_host }}"
+        port: "{{ web_app_port | int }}"
+        timeout: 60
+        delay: 1
+      delegate_to: "{{ web_app_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Verify application health endpoint
+      ansible.builtin.uri:
+        url: "http://{{ web_app_healthcheck_host }}:{{ web_app_port }}{{ web_app_healthcheck_path }}"
+        method: GET
+        status_code: 200
+        return_content: true
+        timeout: "{{ web_app_healthcheck_timeout | int }}"
+      register: web_app_healthcheck
+      retries: "{{ web_app_healthcheck_retries | int }}"
+      delay: "{{ web_app_healthcheck_delay | int }}"
+      until: web_app_healthcheck.status == 200
+      failed_when: web_app_healthcheck.json.status | default("") != "healthy"
+      delegate_to: "{{ web_app_healthcheck_delegate_to }}"
+      become: false
+
+  rescue:
+    - name: Capture docker compose status after failed deployment
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - "{{ web_app_compose_project_dir }}/{{ web_app_compose_file_name }}"
+          - ps
+          - --all
+      register: web_app_compose_ps
+      changed_when: false
+      failed_when: false
+
+    - name: Fail deployment with compose status context
+      ansible.builtin.fail:
+        msg: >-
+          Web app deployment failed. Compose status:
+          {{ web_app_compose_ps.stdout | default('no compose status available') }}
