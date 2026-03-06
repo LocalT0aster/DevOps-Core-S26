@@ -1,8 +1,11 @@
 # Vagrant (libvirt)
 
-This VM is configured for the `libvirt` provider and uses:
+This Vagrant setup is configured for the `libvirt` provider and uses:
 
 - Box: `alvistack/ubuntu-24.04`
+- Machines:
+  - `default` — main lab VM / deployment target
+  - `github-runner` — isolated self-hosted GitHub Actions runner VM
 
 ## Requirements
 
@@ -28,11 +31,22 @@ To re-run provisioning on an existing VM:
 vagrant provision
 ```
 
+The `github-runner` machine is defined with `autostart: false`, so it will not
+come up unless you ask for it explicitly:
+
+```bash
+cd vagrant
+vagrant up github-runner
+vagrant ssh github-runner
+```
+
 Provisioning is split into two stages:
 
 - `shared/provision.sh` (kernel/package update stage)
 - automatic reboot between stages
 - `shared/provision-post-kernel.sh` (post-kernel stage with ansible install)
+- `shared/provision-gh-runner.sh` (runner VM only; installs the GitHub runner binaries)
+- `shared/provision-gh-runner-register.sh` (runner VM only; manual registration step)
 
 SSH key setup:
 
@@ -44,6 +58,8 @@ Static VM IP:
 
 - default: `192.168.121.50`
 - override: `VM_IP=192.168.121.60 vagrant up`
+- runner default: `192.168.121.51`
+- runner override: `RUNNER_VM_IP=192.168.121.61 vagrant up github-runner`
 
 This setup uses:
 
@@ -65,3 +81,68 @@ Host vagrant
 	User vagrant
 	IdentityFile ~/.ssh/vagrant
 ```
+
+## GitHub Runner VM
+
+The runner is intentionally isolated in its own VM. That keeps the deployment
+target and the CI runner state separate.
+
+Bring up the runner VM:
+
+```bash
+cd vagrant
+vagrant up github-runner
+```
+
+Base runner provisioning installs:
+
+- `ansible`
+- `git`, `curl`, `jq`, `tar`, `unzip`
+- the GitHub Actions runner under `/opt/actions-runner`
+- a dedicated `github-runner` user
+
+Registration is a separate manual step because GitHub registration tokens are
+short-lived.
+
+1. Copy the example environment file:
+
+```bash
+cp shared/github-runner.env.example shared/github-runner.env
+```
+
+2. Edit `shared/github-runner.env` and fill in:
+
+- `GH_RUNNER_URL`
+- `GH_RUNNER_TOKEN`
+- optional runner name / labels / group / workdir
+
+If the runner VM is already running, sync the updated file into the guest:
+
+```bash
+vagrant rsync github-runner
+```
+
+3. Run the registration provisioner:
+
+```bash
+vagrant provision github-runner --provision-with github-runner-register
+```
+
+You can also pass the same values through host environment variables instead of
+using `shared/github-runner.env`.
+
+Useful commands:
+
+```bash
+vagrant ssh github-runner
+sudo systemctl list-units 'actions.runner.*'
+sudo systemctl status 'actions.runner.*'
+```
+
+Notes:
+
+- The registration step is idempotent for an already configured runner; it
+  starts the service again if needed.
+- The runner VM does not install Docker by default. For this lab's Ansible
+  workflow, that is sufficient. If you later add container actions, install
+  Docker on the runner VM as well.

@@ -6,9 +6,16 @@
     - ../group_vars/all.yml
 
   tasks:
-    - name: Run app deploy role tasks/defaults/handlers
+    - name: Run web app role
       ansible.builtin.include_role:
-        name: app_deploy
-        tasks_from: app_deploy_tasks
-        defaults_from: app_deploy_defaults
-        handlers_from: app_deploy_handlers
+        name: web_app
+        tasks_from: web_app_tasks
+        defaults_from: web_app_defaults
+        apply:
+          tags:
+            - web_app
+      tags:
+        - web_app
+        - app_deploy
+        - compose
+        - web_app_wipe
