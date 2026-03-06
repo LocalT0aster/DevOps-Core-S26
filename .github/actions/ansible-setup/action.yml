@@ -33,7 +33,6 @@ runs:
         path: |
           ~/.cache/pip
           ~/.ansible/collections
-          ${{ inputs.working-directory }}/.venv-ci
         key: ${{ runner.os }}-py${{ inputs.python-version }}-ansible-${{ hashFiles(inputs.python-requirements-path, inputs.collection-requirements-path) }}
         restore-keys: |
           ${{ runner.os }}-py${{ inputs.python-version }}-ansible-
@@ -42,6 +41,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        rm -rf "${{ inputs.working-directory }}/.venv-ci"
         python -m venv "${{ inputs.working-directory }}/.venv-ci"
         . "${{ inputs.working-directory }}/.venv-ci/bin/activate"
         python -m pip install --upgrade pip
