@@ -1161,7 +1161,65 @@ absent
    - The current implementation already exposes `web_app_wipe_remove_images` and `web_app_wipe_remove_volumes`. To go further, I would add named-volume targeting, network cleanup verification, and possibly a confirmation variable for destructive data removal if persistent volumes matter.
 
 
-## Task 4: CI/CD (pending)
+## Task 4: CI/CD (3 pts)
+
+### Workflow Architecture
+
+- Added a dedicated GitHub Actions workflow in `.github/workflows/ansible-deploy.yml`.
+- Split the workflow logic into local composite actions under `.github/actions/` so the workflow file stays orchestration-focused.
+- Kept `lint` on `ubuntu-latest` and `deploy` on the isolated self-hosted runner labels `self-hosted`, `linux`, `vagrant`.
+- Limited deployment to `push` and `workflow_dispatch`; pull requests run lint only.
+- Added path filters so documentation-only changes under `ansible/docs/` do not trigger the deployment pipeline.
+
+### Modular Actions
+
+- `.github/actions/ansible-setup/action.yml` creates a Python virtual environment, installs `ansible-core` + `ansible-lint`, and installs required collections from `ansible/requirements.yml`.
+- `.github/actions/ansible-lint/action.yml` writes the vault password to a temporary file, runs `ansible-lint`, and performs syntax checks on `provision.yml`, `deploy.yml`, and `site.yml`.
+- `.github/actions/ansible-ssh-setup/action.yml` writes the target SSH key to `~/.ssh/vagrant` so the existing inventory file continues to work unchanged.
+- `.github/actions/ansible-deploy/action.yml` runs `ansible-playbook playbooks/deploy.yml --tags app_deploy` and saves the playbook output as a workflow artifact.
+- `.github/actions/http-healthcheck/action.yml` polls `http://<vm-host>:5000/health` and validates that the JSON reports `"status": "healthy"`.
+
+### Secrets and Repository Settings
+
+Required GitHub Actions secrets:
+- `ANSIBLE_VAULT_PASSWORD`
+- `SSH_PRIVATE_KEY`
+
+The workflow derives the deployment target IP from `ansible/inventory/hosts.ini`, so there is no second host variable to keep in sync.
+The self-hosted runner itself is isolated in the separate `github-runner` Vagrant VM described in `vagrant/README.md`.
+
+### Files Added or Updated
+
+- Added `.github/workflows/ansible-deploy.yml`
+- Added `.github/actions/ansible-setup/action.yml`
+- Added `.github/actions/ansible-lint/action.yml`
+- Added `.github/actions/ansible-ssh-setup/action.yml`
+- Added `.github/actions/ansible-deploy/action.yml`
+- Added `.github/actions/http-healthcheck/action.yml`
+- Added `ansible/requirements-ci.txt`
+- Added the workflow badge to `README.md`
+
+### Validation Status
+
+- The local Ansible side is already validated: `ansible-lint` passes, and the playbooks used by the workflow pass syntax checks.
+- `vagrant validate` for the isolated runner VM passes.
+- The GitHub Actions workflow and composite actions are implemented locally and ready to run on the configured self-hosted runner.
+- Pull requests from external forks are intentionally excluded from the secret-backed lint path, because vault decryption requires repository secrets.
+- A successful GitHub-hosted execution still depends on repository secrets being present and the workflow being triggered from GitHub.
+
+### Research Answers
+
+1. **What are the security implications of storing SSH keys in GitHub Secrets?**
+   - The main benefit is that the key is not committed to the repository, but it is still high-value material. Anyone who can modify a trusted workflow on the default branch can potentially exfiltrate it. The practical controls are branch protection, restricted workflow write access, least-privilege keys, and avoiding self-hosted execution on untrusted pull requests.
+
+2. **How would you implement a staging → production deployment pipeline?**
+   - I would split deployment into at least two environments, each with separate inventories, secrets, and GitHub environments. The workflow would deploy automatically to staging, run verification, and only then allow a protected manual approval gate for production.
+
+3. **What would you add to make rollbacks possible?**
+   - I would pin image tags to immutable versions instead of `latest`, persist the previously deployed tag, and add a rollback workflow input that redeploys the last known good version. For stronger rollback guarantees, I would also archive the exact Compose template and deployment metadata as workflow artifacts.
+
+4. **How does self-hosted runner improve security compared to GitHub-hosted?**
+   - In this lab's setup, the runner stays inside the local private network and can reach the VM directly without exposing SSH to the public internet. That reduces credential sprawl and keeps deployment traffic local. The tradeoff is that a self-hosted runner is persistent, so its trust boundary must be managed more carefully than GitHub-hosted ephemeral runners.
 
 ## Task 5: Documentation
 
