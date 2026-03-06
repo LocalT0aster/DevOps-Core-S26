@@ -63,7 +63,7 @@ This run exercised only the Docker role and also proved that the `rescue` sectio
 <details>
 <summary><code>ansible-playbook playbooks/provision.yml --tags "docker"</code></summary>
 
-```text
+```
 $ ansible-playbook playbooks/provision.yml --tags "docker"
 
 PLAY [Provision web servers] ****************************************************************************************************
@@ -152,7 +152,7 @@ This is the strongest proof for Task 1 because it shows:
 <details>
 <summary><code>ansible-playbook playbooks/provision.yml --skip-tags "common"</code></summary>
 
-```text
+```
 $ ansible-playbook playbooks/provision.yml --skip-tags "common"
 PLAY [Provision web servers] ***************************************************
 
@@ -209,7 +209,7 @@ No `common` tasks ran, which confirms the role-level `common` tag is working.
 <details>
 <summary><code>ansible-playbook playbooks/provision.yml --tags "packages"</code></summary>
 
-```text
+```
 $ ansible-playbook playbooks/provision.yml --tags "packages"
 PLAY [Provision web servers] ***************************************************
 
@@ -242,7 +242,7 @@ This shows the `packages` tag is narrow enough to avoid unrelated common-role ta
 <details>
 <summary><code>ansible-playbook playbooks/provision.yml --tags "docker" --check</code></summary>
 
-```text
+```
 $ ansible-playbook playbooks/provision.yml --tags "docker" --check
 PLAY [Provision web servers] ***************************************************
 
@@ -299,7 +299,7 @@ Check mode completed without errors. One task reported `changed`, which is not s
 <details>
 <summary><code>ansible-playbook playbooks/provision.yml --tags "docker_install"</code></summary>
 
-```text
+```
 $ ansible-playbook playbooks/provision.yml --tags "docker_install"
 PLAY [Provision web servers] ***************************************************
 
@@ -352,7 +352,7 @@ Verified with:
 <details>
 <summary><code>ansible-playbook playbooks/provision.yml --list-tags</code></summary>
 
-```text
+```
 $ ansible-playbook playbooks/provision.yml --list-tags
 
 
@@ -506,7 +506,7 @@ The second deployment run proves idempotency for the Compose-based deployment:
 <details>
 <summary><code>ansible-playbook playbooks/deploy.yml</code> (second run)</summary>
 
-```text
+```
 $ ansible-playbook playbooks/deploy.yml
 
 PLAY [Deploy application] *******************************************************************************************************
@@ -588,7 +588,7 @@ Runtime verification on the VM confirms that the Compose stack is up and the app
 <details>
 <summary><code>docker ps -a</code></summary>
 
-```text
+```
 vagrant@devops-core-s26:~$ docker ps -a
 CONTAINER ID   IMAGE                               COMMAND                  CREATED          STATUS          PORTS                                         NAMES
 bc1ac63a19d3   localt0aster/devops-app-py:latest   "sh -c 'gunicorn --b…"   13 seconds ago   Up 12 seconds   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp   devops-app
@@ -599,7 +599,7 @@ bc1ac63a19d3   localt0aster/devops-app-py:latest   "sh -c 'gunicorn --b…"   13
 <details>
 <summary><code>docker compose -f /opt/devops-app-py/docker-compose.yml ps</code></summary>
 
-```text
+```
 vagrant@devops-core-s26:~$ docker compose -f /opt/devops-app-py/docker-compose.yml ps
 NAME         IMAGE                               COMMAND                  SERVICE         CREATED              STATUS              PORTS
 devops-app   localt0aster/devops-app-py:latest   "sh -c 'gunicorn --b…"   devops-app-py   About a minute ago   Up About a minute   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp
@@ -610,7 +610,7 @@ devops-app   localt0aster/devops-app-py:latest   "sh -c 'gunicorn --b…"   devo
 <details>
 <summary><code>curl -fSsL 127.0.0.1:5000/health | jq</code></summary>
 
-```text
+```
 vagrant@devops-core-s26:~$ curl -fSsL 127.0.0.1:5000/health | jq
 {
   "status": "healthy",
@@ -630,7 +630,536 @@ vagrant@devops-core-s26:~$ curl -fSsL 127.0.0.1:5000/health | jq
 - A second deploy run returns `changed=0`, which demonstrates idempotency for the Compose workflow.
 - The VM shows the expected running container, Compose project status, and a healthy `/health` response.
 
-## Task 3: Wipe Logic (pending)
+## Task 3: Wipe Logic
+
+### Implementation Summary
+
+- Added the wipe control variables to `ansible/roles/web_app/defaults/web_app_defaults.yml`.
+- Added the wipe task file `ansible/roles/web_app/tasks/wipe.yml`.
+- Included wipe processing at the top of `ansible/roles/web_app/tasks/web_app_tasks.yml` so clean reinstall works as wipe → deploy.
+- Added the `web_app_wipe` tag to the `web_app` role includes in `ansible/playbooks/deploy.yml` and `ansible/playbooks/site.yml`.
+- Added optional image and volume cleanup switches with safe defaults of `false`.
+
+### Safety Design
+
+The wipe logic uses two controls:
+- `web_app_wipe: true` is required before any destructive action happens.
+- `--tags web_app_wipe` allows wipe-only execution without running the deployment block.
+
+Practical behavior:
+- Normal deployment leaves wipe tasks skipped because `web_app_wipe` defaults to `false`.
+- `ansible-playbook playbooks/deploy.yml -e web_app_wipe=true --tags web_app_wipe` performs wipe only.
+- `ansible-playbook playbooks/deploy.yml -e web_app_wipe=true` performs clean reinstall.
+
+I used `-e app_compose_pull_policy=missing` for the deploy-related wipe tests so Docker Hub availability would not distort the wipe-logic results. That override was only for testing.
+
+### Evidence
+
+The evidence file is `task3.log`.
+
+#### Scenario 1: Normal deployment
+
+This shows that wipe tasks are present in the role flow but are skipped by default when `web_app_wipe` is `false`.
+
+<details>
+<summary><code>ansible-playbook playbooks/deploy.yml -e app_compose_pull_policy=missing</code></summary>
+
+```
+$ ansible-playbook playbooks/deploy.yml -e app_compose_pull_policy=missing
+
+PLAY [Deploy application] ******************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run web app role] ********************************************************
+included: web_app for vagrant
+
+TASK [docker : Load docker role defaults] **************************************
+ok: [vagrant]
+
+TASK [docker : Install Docker prerequisites] ***********************************
+ok: [vagrant]
+
+TASK [docker : Ensure Docker keyring directory exists] *************************
+ok: [vagrant]
+
+TASK [docker : Add Docker GPG key] *********************************************
+ok: [vagrant]
+
+TASK [docker : Add Docker apt repository] **************************************
+ok: [vagrant]
+
+TASK [docker : Install Docker engine packages] *********************************
+ok: [vagrant]
+
+TASK [docker : Install Docker Python SDK package] ******************************
+ok: [vagrant]
+
+TASK [docker : Mark Docker service as ready] ***********************************
+ok: [vagrant]
+
+TASK [docker : Ensure Docker service is enabled and running] *******************
+ok: [vagrant]
+
+TASK [docker : Record Docker installation block completion] ********************
+ok: [vagrant]
+
+TASK [docker : Add deployment user to docker group] ****************************
+ok: [vagrant]
+
+TASK [docker : Record Docker configuration block completion] *******************
+ok: [vagrant]
+
+TASK [web_app : Include web app wipe tasks] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/web_app/tasks/wipe.yml for vagrant
+
+TASK [web_app : Check whether Compose file exists for wipe] ********************
+ok: [vagrant]
+
+TASK [web_app : Stop and remove Compose-managed containers] ********************
+skipping: [vagrant]
+
+TASK [web_app : Remove standalone web app container if present] ****************
+skipping: [vagrant]
+
+TASK [web_app : Remove Compose file] *******************************************
+skipping: [vagrant]
+
+TASK [web_app : Remove Compose project directory] ******************************
+skipping: [vagrant]
+
+TASK [web_app : Optionally remove deployed image] ******************************
+skipping: [vagrant]
+
+TASK [web_app : Record web app wipe completion] ********************************
+skipping: [vagrant]
+
+TASK [web_app : Report web app wipe status] ************************************
+skipping: [vagrant]
+
+TASK [web_app : Log in to Docker Hub when credentials are available] ***********
+ok: [vagrant]
+
+TASK [web_app : Ensure Compose project directory exists] ***********************
+ok: [vagrant]
+
+TASK [web_app : Check for legacy standalone container] *************************
+ok: [vagrant]
+
+TASK [web_app : Remove legacy standalone container before Compose migration] ***
+skipping: [vagrant]
+
+TASK [web_app : Template Docker Compose configuration] *************************
+ok: [vagrant]
+
+TASK [web_app : Deploy application stack with Docker Compose] ******************
+ok: [vagrant]
+
+TASK [web_app : Wait for application port] *************************************
+ok: [vagrant -> localhost]
+
+TASK [web_app : Verify application health endpoint] ****************************
+ok: [vagrant -> localhost]
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=23   changed=0    unreachable=0    failed=0    skipped=8    rescued=0    ignored=0
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.command -a 'docker compose -f /opt/devops-app-py/docker-compose.yml ps'</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.command -a 'docker compose -f /opt/devops-app-py/docker-compose.yml ps'
+vagrant | CHANGED | rc=0 >>
+NAME         IMAGE                               COMMAND                  SERVICE         CREATED          STATUS          PORTS
+devops-app   localt0aster/devops-app-py:latest   "sh -c 'gunicorn --b…"   devops-app-py   11 minutes ago   Up 11 minutes   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp
+```
+
+</details>
+
+#### Scenario 2: Wipe only
+
+This is the explicit wipe-only path: variable enabled, tag selected, deployment tasks not executed.
+
+<details>
+<summary><code>ansible-playbook playbooks/deploy.yml -e web_app_wipe=true --tags web_app_wipe</code></summary>
+
+```
+$ ansible-playbook playbooks/deploy.yml -e web_app_wipe=true --tags web_app_wipe
+
+PLAY [Deploy application] ******************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run web app role] ********************************************************
+included: web_app for vagrant
+
+TASK [docker : Load docker role defaults] **************************************
+ok: [vagrant]
+
+TASK [web_app : Include web app wipe tasks] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/web_app/tasks/wipe.yml for vagrant
+
+TASK [web_app : Check whether Compose file exists for wipe] ********************
+ok: [vagrant]
+
+TASK [web_app : Stop and remove Compose-managed containers] ********************
+changed: [vagrant]
+
+TASK [web_app : Remove standalone web app container if present] ****************
+ok: [vagrant]
+
+TASK [web_app : Remove Compose file] *******************************************
+changed: [vagrant]
+
+TASK [web_app : Remove Compose project directory] ******************************
+changed: [vagrant]
+
+TASK [web_app : Optionally remove deployed image] ******************************
+skipping: [vagrant]
+
+TASK [web_app : Record web app wipe completion] ********************************
+changed: [vagrant]
+
+TASK [web_app : Report web app wipe status] ************************************
+ok: [vagrant] => {
+    "msg": "Web app devops-app-py wipe completed. Project directory=/opt/devops-app-py."
+}
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=11   changed=4    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.shell -a "docker ps -a | grep -F devops-app || true"</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.shell -a "docker ps -a | grep -F devops-app || true"
+vagrant | CHANGED | rc=0 >>
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.shell -a "if [ -d /opt/devops-app-py ]; then echo present; else echo absent; fi"</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.shell -a "if [ -d /opt/devops-app-py ]; then echo present; else echo absent; fi"
+vagrant | CHANGED | rc=0 >>
+absent
+```
+
+</details>
+
+#### Scenario 3: Clean reinstall
+
+This is the key workflow for Task 3: wipe first, then redeploy cleanly in the same playbook run.
+
+<details>
+<summary><code>ansible-playbook playbooks/deploy.yml -e web_app_wipe=true -e app_compose_pull_policy=missing</code></summary>
+
+```
+$ ansible-playbook playbooks/deploy.yml -e web_app_wipe=true -e app_compose_pull_policy=missing
+
+PLAY [Deploy application] ******************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run web app role] ********************************************************
+included: web_app for vagrant
+
+TASK [docker : Load docker role defaults] **************************************
+ok: [vagrant]
+
+TASK [docker : Install Docker prerequisites] ***********************************
+ok: [vagrant]
+
+TASK [docker : Ensure Docker keyring directory exists] *************************
+ok: [vagrant]
+
+TASK [docker : Add Docker GPG key] *********************************************
+ok: [vagrant]
+
+TASK [docker : Add Docker apt repository] **************************************
+ok: [vagrant]
+
+TASK [docker : Install Docker engine packages] *********************************
+ok: [vagrant]
+
+TASK [docker : Install Docker Python SDK package] ******************************
+ok: [vagrant]
+
+TASK [docker : Mark Docker service as ready] ***********************************
+ok: [vagrant]
+
+TASK [docker : Ensure Docker service is enabled and running] *******************
+ok: [vagrant]
+
+TASK [docker : Record Docker installation block completion] ********************
+ok: [vagrant]
+
+TASK [docker : Add deployment user to docker group] ****************************
+ok: [vagrant]
+
+TASK [docker : Record Docker configuration block completion] *******************
+ok: [vagrant]
+
+TASK [web_app : Include web app wipe tasks] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/web_app/tasks/wipe.yml for vagrant
+
+TASK [web_app : Check whether Compose file exists for wipe] ********************
+ok: [vagrant]
+
+TASK [web_app : Stop and remove Compose-managed containers] ********************
+skipping: [vagrant]
+
+TASK [web_app : Remove standalone web app container if present] ****************
+ok: [vagrant]
+
+TASK [web_app : Remove Compose file] *******************************************
+ok: [vagrant]
+
+TASK [web_app : Remove Compose project directory] ******************************
+ok: [vagrant]
+
+TASK [web_app : Optionally remove deployed image] ******************************
+skipping: [vagrant]
+
+TASK [web_app : Record web app wipe completion] ********************************
+changed: [vagrant]
+
+TASK [web_app : Report web app wipe status] ************************************
+ok: [vagrant] => {
+    "msg": "Web app devops-app-py wipe completed. Project directory=/opt/devops-app-py."
+}
+
+TASK [web_app : Log in to Docker Hub when credentials are available] ***********
+ok: [vagrant]
+
+TASK [web_app : Ensure Compose project directory exists] ***********************
+changed: [vagrant]
+
+TASK [web_app : Check for legacy standalone container] *************************
+ok: [vagrant]
+
+TASK [web_app : Remove legacy standalone container before Compose migration] ***
+skipping: [vagrant]
+
+TASK [web_app : Template Docker Compose configuration] *************************
+changed: [vagrant]
+
+TASK [web_app : Deploy application stack with Docker Compose] ******************
+changed: [vagrant]
+
+TASK [web_app : Wait for application port] *************************************
+ok: [vagrant -> localhost]
+
+TASK [web_app : Verify application health endpoint] ****************************
+ok: [vagrant -> localhost]
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=28   changed=4    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.command -a 'docker compose -f /opt/devops-app-py/docker-compose.yml ps'</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.command -a 'docker compose -f /opt/devops-app-py/docker-compose.yml ps'
+vagrant | CHANGED | rc=0 >>
+NAME         IMAGE                               COMMAND                  SERVICE         CREATED         STATUS         PORTS
+devops-app   localt0aster/devops-app-py:latest   "sh -c 'gunicorn --b…"   devops-app-py   4 seconds ago   Up 3 seconds   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.shell -a "curl -fSsL 127.0.0.1:5000/health"</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.shell -a "curl -fSsL 127.0.0.1:5000/health"
+vagrant | CHANGED | rc=0 >>
+{"status":"healthy","timestamp":"2026-03-06T03:24:46.458130+00:00","uptime_seconds":3}
+```
+
+</details>
+
+#### Scenario 4: Safety checks
+
+For Scenario 4a, the lab text says deployment should run normally when `--tags web_app_wipe` is used with `web_app_wipe=false`. In practice, Ansible tag filtering only selects the wipe-tagged path, so the deployment block does not run. The existing application remains running, which still proves the wipe did not trigger. I believe the lab wording is internally inconsistent here.
+
+<details>
+<summary><code>ansible-playbook playbooks/deploy.yml --tags web_app_wipe</code></summary>
+
+```
+$ ansible-playbook playbooks/deploy.yml --tags web_app_wipe
+
+PLAY [Deploy application] ******************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run web app role] ********************************************************
+included: web_app for vagrant
+
+TASK [docker : Load docker role defaults] **************************************
+ok: [vagrant]
+
+TASK [web_app : Include web app wipe tasks] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/web_app/tasks/wipe.yml for vagrant
+
+TASK [web_app : Check whether Compose file exists for wipe] ********************
+ok: [vagrant]
+
+TASK [web_app : Stop and remove Compose-managed containers] ********************
+skipping: [vagrant]
+
+TASK [web_app : Remove standalone web app container if present] ****************
+skipping: [vagrant]
+
+TASK [web_app : Remove Compose file] *******************************************
+skipping: [vagrant]
+
+TASK [web_app : Remove Compose project directory] ******************************
+skipping: [vagrant]
+
+TASK [web_app : Optionally remove deployed image] ******************************
+skipping: [vagrant]
+
+TASK [web_app : Record web app wipe completion] ********************************
+skipping: [vagrant]
+
+TASK [web_app : Report web app wipe status] ************************************
+skipping: [vagrant]
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=5    changed=0    unreachable=0    failed=0    skipped=7    rescued=0    ignored=0
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.command -a 'docker compose -f /opt/devops-app-py/docker-compose.yml ps'</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.command -a 'docker compose -f /opt/devops-app-py/docker-compose.yml ps'
+vagrant | CHANGED | rc=0 >>
+NAME         IMAGE                               COMMAND                  SERVICE         CREATED          STATUS          PORTS
+devops-app   localt0aster/devops-app-py:latest   "sh -c 'gunicorn --b…"   devops-app-py   11 minutes ago   Up 11 minutes   0.0.0.0:5000->5000/tcp, [::]:5000->5000/tcp
+```
+
+</details>
+
+Scenario 4b is effectively the same selective wipe-only path as Scenario 2, but rechecked after a clean reinstall.
+
+<details>
+<summary><code>ansible-playbook playbooks/deploy.yml -e web_app_wipe=true --tags web_app_wipe</code></summary>
+
+```
+$ ansible-playbook playbooks/deploy.yml -e web_app_wipe=true --tags web_app_wipe
+
+PLAY [Deploy application] ******************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run web app role] ********************************************************
+included: web_app for vagrant
+
+TASK [docker : Load docker role defaults] **************************************
+ok: [vagrant]
+
+TASK [web_app : Include web app wipe tasks] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/web_app/tasks/wipe.yml for vagrant
+
+TASK [web_app : Check whether Compose file exists for wipe] ********************
+ok: [vagrant]
+
+TASK [web_app : Stop and remove Compose-managed containers] ********************
+changed: [vagrant]
+
+TASK [web_app : Remove standalone web app container if present] ****************
+ok: [vagrant]
+
+TASK [web_app : Remove Compose file] *******************************************
+changed: [vagrant]
+
+TASK [web_app : Remove Compose project directory] ******************************
+changed: [vagrant]
+
+TASK [web_app : Optionally remove deployed image] ******************************
+skipping: [vagrant]
+
+TASK [web_app : Record web app wipe completion] ********************************
+ok: [vagrant]
+
+TASK [web_app : Report web app wipe status] ************************************
+ok: [vagrant] => {
+    "msg": "Web app devops-app-py wipe completed. Project directory=/opt/devops-app-py."
+}
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=11   changed=3    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.shell -a "docker ps -a | grep -F devops-app || true"</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.shell -a "docker ps -a | grep -F devops-app || true"
+vagrant | CHANGED | rc=0 >>
+```
+
+</details>
+
+<details>
+<summary><code>ansible webservers -m ansible.builtin.shell -a "if [ -d /opt/devops-app-py ]; then echo present; else echo absent; fi"</code></summary>
+
+```
+$ ansible webservers -m ansible.builtin.shell -a "if [ -d /opt/devops-app-py ]; then echo present; else echo absent; fi"
+vagrant | CHANGED | rc=0 >>
+absent
+```
+
+</details>
+
+### Validation Status
+
+- `ansible-playbook playbooks/deploy.yml --syntax-check` passes.
+- `ansible-playbook playbooks/site.yml --syntax-check` passes.
+- `ansible-lint` passes on the Task 3 files.
+- `ansible-playbook playbooks/deploy.yml --list-tags` shows `web_app_wipe`.
+- All four wipe scenarios were exercised against the VM.
+- The application was restored after testing.
+
+### Research Answers
+
+1. **Why use both variable AND tag?**
+   - The variable is the destructive-action safety switch. The tag is the execution selector. Together they reduce accidental wipes and also support a wipe-only workflow without running normal deployment tasks.
+
+2. **What's the difference between `never` tag and this approach?**
+   - `never` disables tasks unless explicitly requested by tag, but it does not express business intent by itself. The variable-plus-tag approach is clearer because it encodes both operator intent and destructive permission. It is also easier to support clean reinstall with the same playbook run.
+
+3. **Why must wipe logic come BEFORE deployment?**
+   - Because clean reinstall is a sequential workflow: remove the old deployment first, then recreate it from a known-clean state. If wipe happened after deployment, it would destroy the fresh deployment.
+
+4. **When would you want clean reinstallation vs. rolling update?**
+   - Clean reinstall is useful when state is corrupted, migrations need a known baseline, or you want to prove reproducibility from scratch. Rolling update is better when you want lower disruption and the current deployment is already healthy.
+
+5. **How would you extend this to wipe Docker images and volumes too?**
+   - The current implementation already exposes `web_app_wipe_remove_images` and `web_app_wipe_remove_volumes`. To go further, I would add named-volume targeting, network cleanup verification, and possibly a confirmation variable for destructive data removal if persistent volumes matter.
+
 
 ## Task 4: CI/CD (pending)
 

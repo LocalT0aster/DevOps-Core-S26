@@ -35,3 +35,12 @@ web_app_compose_wait_timeout: "{{ app_compose_wait_timeout | default(60) }}"
 web_app_compose_remove_orphans: "{{ app_compose_remove_orphans | default(true) }}"
 web_app_network_name: "{{ web_app_name }}-network"
 web_app_container_command: "{{ app_container_command | default('') }}"
+
+# Wipe logic control
+# Set to true to remove the deployed application before continuing.
+# Wipe only: ansible-playbook playbooks/deploy.yml -e "web_app_wipe=true" --tags web_app_wipe
+# Clean install: ansible-playbook playbooks/deploy.yml -e "web_app_wipe=true"
+web_app_wipe: false
+web_app_wipe_remove_images: false
+web_app_wipe_remove_volumes: false
+web_app_wipe_log_path: "/tmp/ansible-web-app-wipe.log"
