@@ -1,4 +1,10 @@
 ---
+- name: Load docker role defaults
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/defaults/docker_defaults.yml"
+  tags:
+    - always
+
 - name: Manage Docker installation
   become: true
   tags:

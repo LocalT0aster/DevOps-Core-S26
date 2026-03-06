@@ -20,9 +20,7 @@
     - name: Run docker role tasks/defaults/handlers
       ansible.builtin.include_role:
         name: docker
-        tasks_from: docker_tasks
         defaults_from: docker_defaults
-        handlers_from: docker_handlers
         apply:
           tags:
             - docker
