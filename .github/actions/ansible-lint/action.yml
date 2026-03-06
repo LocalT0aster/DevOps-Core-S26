@@ -1,0 +1,39 @@
+name: Ansible Lint
+description: Run ansible-lint and syntax checks with vault access
+
+inputs:
+  ansible-directory:
+    description: Directory containing the Ansible project
+    required: false
+    default: "ansible"
+  vault-password:
+    description: Vault password used to decrypt encrypted vars during linting
+    required: true
+  playbook-glob:
+    description: Playbook glob for ansible-lint
+    required: false
+    default: "playbooks/*.yml"
+
+runs:
+  using: composite
+  steps:
+    - name: Run ansible-lint and syntax checks
+      shell: bash
+      working-directory: ${{ inputs.ansible-directory }}
+      env:
+        VAULT_PASSWORD: ${{ inputs.vault-password }}
+        PLAYBOOK_GLOB: ${{ inputs.playbook-glob }}
+      run: |
+        set -euo pipefail
+        umask 077
+        cleanup() {
+          rm -f .vault_pass
+        }
+        trap cleanup EXIT
+
+        printf '%s\n' "$VAULT_PASSWORD" > .vault_pass
+
+        ansible-lint $PLAYBOOK_GLOB
+        ansible-playbook playbooks/provision.yml --syntax-check
+        ansible-playbook playbooks/deploy.yml --syntax-check
+        ansible-playbook playbooks/site.yml --syntax-check
