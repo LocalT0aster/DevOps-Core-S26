@@ -1,20 +1,20 @@
-name: Python Docker Publish
+name: Go Docker Publish
 
 on:
   push:
     branches:
       - "lab*"
     paths:
-      - app_python/**
-      - .github/workflows/python-docker.yml
+      - app_go/**
+      - .github/workflows/go-docker.yml
   pull_request:
     branches:
       - master
     types:
       - closed
     paths:
-      - app_python/**
-      - .github/workflows/python-docker.yml
+      - app_go/**
+      - .github/workflows/go-docker.yml
 
 jobs:
   build-and-push-branch:
@@ -43,11 +43,11 @@ jobs:
       - name: Build and push Docker image (branch)
         uses: docker/build-push-action@v7
         with:
-          context: ./app_python
-          file: ./app_python/Dockerfile
+          context: ./app_go
+          file: ./app_go/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:${{ steps.version.outputs.branch_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-go:${{ steps.version.outputs.branch_tag }}
 
   build-and-push:
     if: github.event.pull_request.merged == true
@@ -74,9 +74,9 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
-          context: ./app_python
-          file: ./app_python/Dockerfile
+          context: ./app_go
+          file: ./app_go/Dockerfile
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:${{ steps.version.outputs.version_tag }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-go:${{ steps.version.outputs.version_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-go:latest
