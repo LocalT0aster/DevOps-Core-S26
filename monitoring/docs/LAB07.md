@@ -363,7 +363,11 @@ environment:
 
 ```yaml
 healthcheck:
-  test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+  test:
+    [
+      "CMD-SHELL",
+      "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1",
+    ]
   interval: 10s
   timeout: 5s
   retries: 5
@@ -423,7 +427,357 @@ Useful LogQL checks:
 {app=~"devops-python|devops-go"} | json | level=~"ERROR|error"
 ```
 
-## 8. Challenges
+## 8. Bonus Task
+
+### Automated deployment with Ansible
+
+The bonus task was implemented as a dedicated monitoring deployment playbook plus a reusable role:
+
+- `ansible/playbooks/deploy-monitoring.yml`
+- `ansible/roles/monitoring/defaults/main.yml`
+- `ansible/roles/monitoring/tasks/setup.yml`
+- `ansible/roles/monitoring/tasks/deploy.yml`
+- `ansible/roles/monitoring/templates/*.j2`
+
+The role creates `/opt/devops-monitoring`, templates the Compose stack plus Loki, Promtail, Grafana, and `.env` files, starts the stack with `community.docker.docker_compose_v2`, and verifies:
+
+- published ports for Loki, Promtail, Grafana, Python app, and Go app;
+- Loki `/ready`;
+- Promtail `/targets`;
+- Grafana `/api/health`;
+- Grafana auth gate returning `401` anonymously;
+- Python `/health`;
+- Go `/health`;
+- the external `app-go-healthcheck` container status.
+
+The first manual runs exposed a real bug in the role: the healthcheck assertion was hard-coded to `monitoring-app-go-healthcheck-1`, but the VM uses Compose project name `devops-monitoring`, so the real container name is `devops-monitoring-app-go-healthcheck-1`. I fixed that by deriving the container name from `monitoring_dir | basename`.
+
+### CI dependency gate
+
+`.github/workflows/ansible-deploy.yml` now contains a `wait-for-prerequisites` job. It polls workflow runs for the current commit and waits for:
+
+- `Go Docker Publish`
+- `Python CI`
+- `Python Docker Publish`
+
+Practical behavior:
+
+- if one of these workflows exists for the same commit and is still running, Ansible deployment waits;
+- if one exists and fails, the Ansible workflow fails before deployment;
+- if a workflow never started for that commit because its path filters did not match, it is treated as not applicable after a short grace period instead of deadlocking the pipeline.
+
+### Playbook evidence
+
+Because the VM images were already pulled and Docker Hub reachability on my host is inconsistent, the successful validation reruns used:
+
+```bash
+cd ansible
+.venv/bin/ansible-playbook playbooks/deploy-monitoring.yml \
+  -e monitoring_compose_pull_policy=missing \
+  -e monitoring_compose_wait=false
+```
+
+<details>
+<summary>Initial failed run before the container-name fix</summary>
+
+```text
+PLAY [Deploy monitoring stack] *************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run monitoring role] *****************************************************
+included: monitoring for vagrant
+
+TASK [monitoring : Prepare monitoring stack files] *****************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/setup.yml for vagrant
+
+TASK [monitoring : Ensure monitoring directory structure exists] ***************
+ok: [vagrant] => (item=/opt/devops-monitoring)
+ok: [vagrant] => (item=/opt/devops-monitoring/loki)
+ok: [vagrant] => (item=/opt/devops-monitoring/promtail)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana/provisioning)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana/provisioning/datasources)
+
+TASK [monitoring : Template monitoring environment file] ***********************
+ok: [vagrant]
+
+TASK [monitoring : Template monitoring Docker Compose configuration] ***********
+ok: [vagrant]
+
+TASK [monitoring : Template Loki configuration] ********************************
+ok: [vagrant]
+
+TASK [monitoring : Template Promtail configuration] ****************************
+ok: [vagrant]
+
+TASK [monitoring : Template Grafana Loki datasource provisioning] **************
+ok: [vagrant]
+
+TASK [monitoring : Deploy monitoring stack] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/deploy.yml for vagrant
+
+TASK [monitoring : Skip monitoring deployment actions in check mode] ***********
+skipping: [vagrant]
+
+TASK [monitoring : Log in to Docker Hub when credentials are available] ********
+ok: [vagrant]
+
+TASK [monitoring : Deploy monitoring stack with Docker Compose v2] *************
+changed: [vagrant]
+
+TASK [monitoring : Wait for exposed monitoring ports] **************************
+ok: [vagrant -> localhost] => (item=3100)
+ok: [vagrant -> localhost] => (item=9080)
+ok: [vagrant -> localhost] => (item=3000)
+ok: [vagrant -> localhost] => (item=8000)
+ok: [vagrant -> localhost] => (item=8001)
+
+TASK [monitoring : Verify Loki readiness endpoint] *****************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Promtail targets endpoint] ***************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Grafana API health] **********************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Grafana requires authentication] *********************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Python application health endpoint] ******************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Go application health endpoint] **********************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Read external Go healthcheck container info] ****************
+ok: [vagrant]
+
+TASK [monitoring : Assert external Go healthcheck is healthy] ******************
+[ERROR]: Task failed: Action failed: External Go healthcheck container is not healthy.
+Origin: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/deploy.yml:148:7
+
+146       when: monitoring_go_external_healthcheck_enabled | bool
+147
+148     - name: Assert external Go healthcheck is healthy
+          ^ column 7
+
+fatal: [vagrant]: FAILED! => {
+    "assertion": "monitoring_go_healthcheck_container.exists | bool",
+    "changed": false,
+    "evaluated_to": false,
+    "msg": "External Go healthcheck container is not healthy."
+}
+
+TASK [monitoring : Capture docker compose status after failed monitoring deployment] ***
+ok: [vagrant]
+
+TASK [monitoring : Fail deployment with compose status context] ****************
+[ERROR]: Task failed: Action failed: Monitoring deployment failed. Compose status: NAME                                     IMAGE                               COMMAND                  SERVICE              CREATED          STATUS                    PORTS
+devops-monitoring-app-go-1               localt0aster/devops-app-go:latest   "/devops-info-servic…"   app-go               41 seconds ago   Up 40 seconds             0.0.0.0:8001->8001/tcp, [::]:8001->8001/tcp
+devops-monitoring-app-go-healthcheck-1   curlimages/curl:8.18.0              "/entrypoint.sh sh -…"   app-go-healthcheck   41 seconds ago   Up 40 seconds (healthy)
+devops-monitoring-app-python-1           localt0aster/devops-app-py:latest   "sh -c 'gunicorn --c…"   app-python           41 seconds ago   Up 40 seconds (healthy)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+devops-monitoring-grafana-1              grafana/grafana:12.3.1              "/run.sh"                grafana              41 seconds ago   Up 20 seconds (healthy)   0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+devops-monitoring-loki-1                 grafana/loki:3.0.0                  "/usr/bin/loki -conf…"   loki                 41 seconds ago   Up 40 seconds (healthy)   0.0.0.0:3100->3100/tcp, [::]:3100->3100/tcp
+devops-monitoring-promtail-1             grafana/promtail:3.0.0              "/usr/bin/promtail -…"   promtail             41 seconds ago   Up 20 seconds             0.0.0.0:9080->9080/tcp, [::]:9080->9080/tcp
+Origin: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/deploy.yml:170:7
+
+168       failed_when: false
+169
+170     - name: Fail deployment with compose status context
+          ^ column 7
+
+fatal: [vagrant]: FAILED! => {"changed": false, "msg": "Monitoring deployment failed. Compose status: NAME                                     IMAGE                               COMMAND                  SERVICE              CREATED          STATUS                    PORTS\ndevops-monitoring-app-go-1               localt0aster/devops-app-go:latest   \"/devops-info-servic…\"   app-go               41 seconds ago   Up 40 seconds             0.0.0.0:8001->8001/tcp, [::]:8001->8001/tcp\ndevops-monitoring-app-go-healthcheck-1   curlimages/curl:8.18.0              \"/entrypoint.sh sh -…\"   app-go-healthcheck   41 seconds ago   Up 40 seconds (healthy)   \ndevops-monitoring-app-python-1           localt0aster/devops-app-py:latest   \"sh -c 'gunicorn --c…\"   app-python           41 seconds ago   Up 40 seconds (healthy)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp\ndevops-monitoring-grafana-1              grafana/grafana:12.3.1              \"/run.sh\"                grafana              41 seconds ago   Up 20 seconds (healthy)   0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp\ndevops-monitoring-loki-1                 grafana/loki:3.0.0                  \"/usr/bin/loki -conf…\"   loki                 41 seconds ago   Up 40 seconds (healthy)   0.0.0.0:3100->3100/tcp, [::]:3100->3100/tcp\ndevops-monitoring-promtail-1             grafana/promtail:3.0.0              \"/usr/bin/promtail -…\"   promtail             41 seconds ago   Up 20 seconds             0.0.0.0:9080->9080/tcp, [::]:9080->9080/tcp"}
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=21   changed=1    unreachable=0    failed=1    skipped=1    rescued=1    ignored=0
+```
+
+</details>
+
+<details>
+<summary>Successful rerun after the fix</summary>
+
+```text
+PLAY [Deploy monitoring stack] *************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run monitoring role] *****************************************************
+included: monitoring for vagrant
+
+TASK [monitoring : Prepare monitoring stack files] *****************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/setup.yml for vagrant
+
+TASK [monitoring : Ensure monitoring directory structure exists] ***************
+ok: [vagrant] => (item=/opt/devops-monitoring)
+ok: [vagrant] => (item=/opt/devops-monitoring/loki)
+ok: [vagrant] => (item=/opt/devops-monitoring/promtail)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana/provisioning)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana/provisioning/datasources)
+
+TASK [monitoring : Template monitoring environment file] ***********************
+ok: [vagrant]
+
+TASK [monitoring : Template monitoring Docker Compose configuration] ***********
+ok: [vagrant]
+
+TASK [monitoring : Template Loki configuration] ********************************
+ok: [vagrant]
+
+TASK [monitoring : Template Promtail configuration] ****************************
+ok: [vagrant]
+
+TASK [monitoring : Template Grafana Loki datasource provisioning] **************
+ok: [vagrant]
+
+TASK [monitoring : Deploy monitoring stack] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/deploy.yml for vagrant
+
+TASK [monitoring : Skip monitoring deployment actions in check mode] ***********
+skipping: [vagrant]
+
+TASK [monitoring : Log in to Docker Hub when credentials are available] ********
+ok: [vagrant]
+
+TASK [monitoring : Deploy monitoring stack with Docker Compose v2] *************
+ok: [vagrant]
+
+TASK [monitoring : Wait for exposed monitoring ports] **************************
+ok: [vagrant -> localhost] => (item=3100)
+ok: [vagrant -> localhost] => (item=9080)
+ok: [vagrant -> localhost] => (item=3000)
+ok: [vagrant -> localhost] => (item=8000)
+ok: [vagrant -> localhost] => (item=8001)
+
+TASK [monitoring : Verify Loki readiness endpoint] *****************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Promtail targets endpoint] ***************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Grafana API health] **********************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Grafana requires authentication] *********************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Python application health endpoint] ******************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Go application health endpoint] **********************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Read external Go healthcheck container info] ****************
+ok: [vagrant]
+
+TASK [monitoring : Assert external Go healthcheck is healthy] ******************
+ok: [vagrant] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=21   changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+```
+
+</details>
+
+<details>
+<summary>Idempotent rerun after the fix</summary>
+
+```text
+PLAY [Deploy monitoring stack] *************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [vagrant]
+
+TASK [Run monitoring role] *****************************************************
+included: monitoring for vagrant
+
+TASK [monitoring : Prepare monitoring stack files] *****************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/setup.yml for vagrant
+
+TASK [monitoring : Ensure monitoring directory structure exists] ***************
+ok: [vagrant] => (item=/opt/devops-monitoring)
+ok: [vagrant] => (item=/opt/devops-monitoring/loki)
+ok: [vagrant] => (item=/opt/devops-monitoring/promtail)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana/provisioning)
+ok: [vagrant] => (item=/opt/devops-monitoring/grafana/provisioning/datasources)
+
+TASK [monitoring : Template monitoring environment file] ***********************
+ok: [vagrant]
+
+TASK [monitoring : Template monitoring Docker Compose configuration] ***********
+ok: [vagrant]
+
+TASK [monitoring : Template Loki configuration] ********************************
+ok: [vagrant]
+
+TASK [monitoring : Template Promtail configuration] ****************************
+ok: [vagrant]
+
+TASK [monitoring : Template Grafana Loki datasource provisioning] **************
+ok: [vagrant]
+
+TASK [monitoring : Deploy monitoring stack] ************************************
+included: /home/t0ast/Repos/DevOps-Core-S26/ansible/roles/monitoring/tasks/deploy.yml for vagrant
+
+TASK [monitoring : Skip monitoring deployment actions in check mode] ***********
+skipping: [vagrant]
+
+TASK [monitoring : Log in to Docker Hub when credentials are available] ********
+ok: [vagrant]
+
+TASK [monitoring : Deploy monitoring stack with Docker Compose v2] *************
+ok: [vagrant]
+
+TASK [monitoring : Wait for exposed monitoring ports] **************************
+ok: [vagrant -> localhost] => (item=3100)
+ok: [vagrant -> localhost] => (item=9080)
+ok: [vagrant -> localhost] => (item=3000)
+ok: [vagrant -> localhost] => (item=8000)
+ok: [vagrant -> localhost] => (item=8001)
+
+TASK [monitoring : Verify Loki readiness endpoint] *****************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Promtail targets endpoint] ***************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Grafana API health] **********************************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Grafana requires authentication] *********************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Python application health endpoint] ******************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Verify Go application health endpoint] **********************
+ok: [vagrant -> localhost]
+
+TASK [monitoring : Read external Go healthcheck container info] ****************
+ok: [vagrant]
+
+TASK [monitoring : Assert external Go healthcheck is healthy] ******************
+ok: [vagrant] => {
+    "changed": false,
+    "msg": "All assertions passed"
+}
+
+PLAY RECAP *********************************************************************
+vagrant                    : ok=21   changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0
+```
+
+</details>
+
+## 9. Challenges
 
 ### 1. Docker build networking under VPN
 

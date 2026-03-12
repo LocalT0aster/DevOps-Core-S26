@@ -30,6 +30,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ansible-deploy-${{ github.ref }}
@@ -58,9 +59,180 @@ jobs:
           ansible-directory: ${{ env.ANSIBLE_DIRECTORY }}
           vault-password: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
 
+  wait-for-prerequisites:
+    name: Wait for Prerequisite Workflows
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Wait for required workflow runs on current commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          BEFORE_SHA: ${{ github.event.before || '' }}
+          PR_NUMBER: ${{ github.event.pull_request.number || '' }}
+        run: |
+          set -euo pipefail
+
+          api() {
+            curl -fsSL \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "$1"
+          }
+
+          declare -A required_workflows=()
+
+          add_workflow() {
+            required_workflows["$1"]=1
+          }
+
+          changed_files=()
+          if [[ "$EVENT_NAME" == "pull_request" && -n "$PR_NUMBER" ]]; then
+            while IFS= read -r path; do
+              [[ -n "$path" ]] && changed_files+=("$path")
+            done < <(
+              api "https://api.github.com/repos/$REPOSITORY/pulls/$PR_NUMBER/files?per_page=100" \
+                | jq -r '.[].filename'
+            )
+          elif [[ -n "$BEFORE_SHA" && "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            while IFS= read -r path; do
+              [[ -n "$path" ]] && changed_files+=("$path")
+            done < <(
+              api "https://api.github.com/repos/$REPOSITORY/compare/$BEFORE_SHA...$COMMIT_SHA" \
+                | jq -r '.files[]?.filename'
+            )
+          fi
+
+          for path in "${changed_files[@]}"; do
+            case "$path" in
+              app_go/*|.github/workflows/go-docker.yml)
+                if [[ "$REF_NAME" == lab* ]]; then
+                  add_workflow "Go Docker Publish"
+                fi
+                ;;
+            esac
+
+            case "$path" in
+              app_python/*|.github/actions/python-setup/*|.github/workflows/python-ci.yml)
+                add_workflow "Python CI"
+                ;;
+            esac
+
+            case "$path" in
+              app_python/*|.github/workflows/python-docker.yml)
+                if [[ "$REF_NAME" == lab* ]]; then
+                  add_workflow "Python Docker Publish"
+                fi
+                ;;
+            esac
+          done
+
+          deadline=$(( $(date +%s) + 900 ))
+          grace_deadline=$(( $(date +%s) + 60 ))
+          tracked_workflows=(
+            "Go Docker Publish"
+            "Python CI"
+            "Python Docker Publish"
+          )
+
+          while (( $(date +%s) < deadline )); do
+            runs_json="$(
+              api "https://api.github.com/repos/$REPOSITORY/actions/runs?head_sha=$COMMIT_SHA&per_page=100"
+            )"
+
+            while IFS= read -r workflow_name; do
+              [[ -n "$workflow_name" ]] && add_workflow "$workflow_name"
+            done < <(
+              jq -r '
+                .workflow_runs[]
+                | select(
+                    .name == "Go Docker Publish"
+                    or .name == "Python CI"
+                    or .name == "Python Docker Publish"
+                  )
+                | .name
+              ' <<<"$runs_json"
+            )
+
+            if (( ${#required_workflows[@]} == 0 )); then
+              echo "No prerequisite workflows apply to this commit."
+              exit 0
+            fi
+
+            pending=0
+            failures=()
+
+            for workflow_name in "${tracked_workflows[@]}"; do
+              if [[ -z "${required_workflows[$workflow_name]+x}" ]]; then
+                continue
+              fi
+
+              run_json="$(
+                jq -c \
+                  --arg name "$workflow_name" \
+                  '.workflow_runs
+                  | map(select(.name == $name))
+                  | sort_by(.run_started_at // .created_at)
+                  | last // empty' <<<"$runs_json"
+              )"
+
+              if [[ -z "$run_json" ]]; then
+                if (( $(date +%s) < grace_deadline )); then
+                  echo "Waiting for workflow record: $workflow_name"
+                  pending=1
+                  continue
+                fi
+
+                echo "No run found for $workflow_name on $COMMIT_SHA after grace period; treating it as not triggered."
+                continue
+              fi
+
+              status="$(jq -r '.status' <<<"$run_json")"
+              conclusion="$(jq -r '.conclusion // ""' <<<"$run_json")"
+              event="$(jq -r '.event' <<<"$run_json")"
+              html_url="$(jq -r '.html_url' <<<"$run_json")"
+
+              echo "$workflow_name: status=$status conclusion=${conclusion:-n/a} event=$event"
+
+              if [[ "$status" != "completed" ]]; then
+                pending=1
+                continue
+              fi
+
+              case "$conclusion" in
+                success|skipped)
+                  ;;
+                *)
+                  failures+=("$workflow_name ($conclusion) $html_url")
+                  ;;
+              esac
+            done
+
+            if (( ${#failures[@]} > 0 )); then
+              printf 'Prerequisite workflow failed: %s\n' "${failures[@]}" >&2
+              exit 1
+            fi
+
+            if (( pending == 0 )); then
+              echo "All prerequisite workflows finished successfully."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "Timed out while waiting for prerequisite workflows on $COMMIT_SHA." >&2
+          exit 1
+
   deploy:
     name: Deploy Application
-    needs: lint
+    needs:
+      - lint
+      - wait-for-prerequisites
     if: github.event_name != 'pull_request'
     runs-on:
       - self-hosted
