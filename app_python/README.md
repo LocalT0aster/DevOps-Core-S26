@@ -37,10 +37,11 @@ poetry install
 Production-style local run with Gunicorn:
 
 ```bash
-poetry run gunicorn --bind 0.0.0.0:5000 src.main:app
-# Or with custom config
-HOST=127.0.0.1 PORT=8080 poetry run gunicorn --bind 127.0.0.1:8080 src.main:app
+poetry run gunicorn --config gunicorn.conf.py src.main:app
+HOST=127.0.0.1 PORT=8080 poetry run gunicorn --config gunicorn.conf.py src.main:app
 ```
+
+Gunicorn access logs are emitted as JSON so Loki can parse request fields cleanly.
 
 ### Docker
 
