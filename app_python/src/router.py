@@ -15,7 +15,7 @@ try:
 except ImportError:  # pragma: no cover - allows `python src/main.py`
     from flask_instance import START_TIME, app, logger
 
-__version__ = "1.0.0"
+__version__ = "1.7.0"
 
 
 def get_service_info() -> dict[str, str]:
@@ -84,6 +84,13 @@ def get_request_info(req) -> dict[str, str | None]:
     }
 
 
+def get_request_log_context(req, status_code: int) -> dict[str, str | int | None]:
+    """Return request metadata suitable for structured logs."""
+    context = get_request_info(req)
+    context["status_code"] = status_code
+    return context
+
+
 def list_routes() -> list[dict[str, str]]:
     """Return a flat list of route + method + description."""
     out: list[dict[str, str]] = []
@@ -113,7 +120,6 @@ def list_routes() -> list[dict[str, str]]:
 @app.route("/")
 def index():
     """Service information."""
-    logger.debug("Request: %s %s", request.method, request.path)
     return jsonify(
         {
             "service": get_service_info(),
@@ -128,7 +134,6 @@ def index():
 @app.route("/health")
 def health():
     """Health check."""
-    logger.debug("Request: %s %s", request.method, request.path)
     return jsonify(
         {
             "status": "healthy",
@@ -141,13 +146,25 @@ def health():
 @app.errorhandler(404)
 def not_found(error):  # noqa: ARG001
     """Return a JSON 404 payload."""
-    logger.debug("Request: %s %s", request.method, request.path)
+    logger.warning(
+        "request returned not found",
+        extra=get_request_log_context(request, status_code=404),
+    )
     return jsonify({"error": "Not Found", "message": "Endpoint does not exist"}), 404
 
 
 @app.errorhandler(500)
 def internal_error(error):  # noqa: ARG001
     """Return a JSON 500 payload."""
+    original_error = getattr(error, "original_exception", None) or error
+    logger.error(
+        "request failed",
+        extra={
+            **get_request_log_context(request, status_code=500),
+            "error_type": type(original_error).__name__,
+            "error": str(original_error),
+        },
+    )
     return (
         jsonify(
             {

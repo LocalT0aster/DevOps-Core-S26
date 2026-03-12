@@ -1,0 +1,83 @@
+---
+monitoring_registry_username: "{{ dockerhub_username | default('') }}"
+monitoring_registry_password: "{{ dockerhub_password | default(docker_api_token | default('')) }}"
+
+monitoring_dir: /opt/devops-monitoring
+monitoring_compose_file: docker-compose.yml
+monitoring_env_file: .env
+monitoring_project_name: "{{ monitoring_dir | basename }}"
+
+monitoring_loki_version: 3.0.0
+monitoring_promtail_version: 3.0.0
+monitoring_grafana_version: 12.3.1
+
+monitoring_loki_port: 3100
+monitoring_loki_grpc_port: 9096
+monitoring_promtail_port: 9080
+monitoring_grafana_port: 3000
+
+monitoring_loki_retention_period: 168h
+monitoring_loki_schema_version: v13
+monitoring_loki_schema_from: "2024-01-01"
+
+monitoring_grafana_admin_user: "{{ grafana_admin_user | default('admin') }}"
+monitoring_grafana_admin_password: "{{ grafana_admin_password | default('ChangeMe!123') }}"
+monitoring_grafana_allow_embedding: true
+monitoring_grafana_anonymous_enabled: false
+
+monitoring_python_image: >-
+  {{ (monitoring_registry_username ~ '/devops-app-py')
+  if monitoring_registry_username | length > 0 else 'localt0aster/devops-app-py' }}
+monitoring_python_tag: "{{ monitoring_python_image_tag | default(docker_image_tag | default('latest')) }}"
+monitoring_python_port: 8000
+monitoring_python_internal_port: 8000
+monitoring_python_app_label: devops-python
+monitoring_python_health_path: /health
+
+monitoring_go_image: >-
+  {{ (monitoring_registry_username ~ '/devops-app-go')
+  if monitoring_registry_username | length > 0 else 'localt0aster/devops-app-go' }}
+monitoring_go_tag: "{{ monitoring_go_image_tag | default(docker_image_tag | default('latest')) }}"
+monitoring_go_port: 8001
+monitoring_go_internal_port: 8001
+monitoring_go_app_label: devops-go
+monitoring_go_health_path: /health
+monitoring_go_external_healthcheck_enabled: true
+monitoring_go_healthcheck_image: curlimages/curl:8.18.0
+
+monitoring_loki_cpu_limit: "1.0"
+monitoring_loki_memory_limit: 1G
+monitoring_loki_cpu_reservation: "0.25"
+monitoring_loki_memory_reservation: 256M
+
+monitoring_promtail_cpu_limit: "0.5"
+monitoring_promtail_memory_limit: 256M
+monitoring_promtail_cpu_reservation: "0.10"
+monitoring_promtail_memory_reservation: 64M
+
+monitoring_grafana_cpu_limit: "1.0"
+monitoring_grafana_memory_limit: 512M
+monitoring_grafana_cpu_reservation: "0.25"
+monitoring_grafana_memory_reservation: 128M
+
+monitoring_app_cpu_limit: "0.5"
+monitoring_app_memory_limit: 256M
+monitoring_app_cpu_reservation: "0.10"
+monitoring_app_memory_reservation: 64M
+
+monitoring_go_healthcheck_cpu_limit: "0.10"
+monitoring_go_healthcheck_memory_limit: 64M
+monitoring_go_healthcheck_cpu_reservation: "0.05"
+monitoring_go_healthcheck_memory_reservation: 32M
+
+monitoring_compose_pull_policy: always
+monitoring_compose_recreate: auto
+monitoring_compose_wait: true
+monitoring_compose_wait_timeout: 180
+monitoring_compose_remove_orphans: true
+
+monitoring_healthcheck_host: "{{ monitoring_public_host | default(ansible_host | default(inventory_hostname)) }}"
+monitoring_healthcheck_delegate_to: "{{ monitoring_healthcheck_delegate | default('localhost') }}"
+monitoring_healthcheck_timeout: 5
+monitoring_healthcheck_retries: 20
+monitoring_healthcheck_delay: 3

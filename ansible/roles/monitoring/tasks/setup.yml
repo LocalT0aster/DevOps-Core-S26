@@ -1,0 +1,55 @@
+---
+- name: Ensure monitoring directory structure exists
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ monitoring_dir }}"
+    - "{{ monitoring_dir }}/loki"
+    - "{{ monitoring_dir }}/promtail"
+    - "{{ monitoring_dir }}/grafana"
+    - "{{ monitoring_dir }}/grafana/provisioning"
+    - "{{ monitoring_dir }}/grafana/provisioning/datasources"
+
+- name: Template monitoring environment file
+  ansible.builtin.template:
+    src: env.j2
+    dest: "{{ monitoring_dir }}/{{ monitoring_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Template monitoring Docker Compose configuration
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ monitoring_dir }}/{{ monitoring_compose_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Template Loki configuration
+  ansible.builtin.template:
+    src: loki-config.yml.j2
+    dest: "{{ monitoring_dir }}/loki/config.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Template Promtail configuration
+  ansible.builtin.template:
+    src: promtail-config.yml.j2
+    dest: "{{ monitoring_dir }}/promtail/config.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Template Grafana Loki datasource provisioning
+  ansible.builtin.template:
+    src: grafana-loki-datasource.yml.j2
+    dest: "{{ monitoring_dir }}/grafana/provisioning/datasources/loki.yml"
+    owner: root
+    group: root
+    mode: "0644"
