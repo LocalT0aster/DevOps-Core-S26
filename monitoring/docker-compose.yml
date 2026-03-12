@@ -47,6 +47,42 @@ services:
       - monitoring
     restart: unless-stopped
 
+  app-python:
+    image: localt0aster/devops-app-py:1.7.9a42ee5
+    # Re-enable local builds if Docker networking breaks behind the tun/VPN setup.
+    # build:
+    #   context: ../app_python
+    #   network: host
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    labels:
+      logging: "promtail"
+      app: "devops-python"
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  app-go:
+    image: localt0aster/devops-app-go:1.7.9a42ee5
+    # Re-enable local builds if Docker networking breaks behind the tun/VPN setup.
+    # build:
+    #   context: ../app_go
+    #   network: host
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8001"
+    ports:
+      - "8001:8001"
+    labels:
+      logging: "promtail"
+      app: "devops-go"
+    networks:
+      - monitoring
+    restart: unless-stopped
+
 volumes:
   loki-data:
   promtail-data:
