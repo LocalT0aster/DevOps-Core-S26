@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: ./app_python
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Setup Python tooling and dependencies
         uses: ./.github/actions/python-setup
       - name: Setup Snyk CLI
