@@ -1,0 +1,174 @@
+---
+- name: Skip monitoring deployment actions in check mode
+  ansible.builtin.debug:
+    msg: Monitoring stack deployment is skipped in check mode.
+  when: ansible_check_mode
+
+- name: Deploy monitoring stack with Docker Compose
+  tags:
+    - monitoring
+    - monitoring_deploy
+    - compose
+  when: not ansible_check_mode
+  block:
+    - name: Log in to Docker Hub when credentials are available
+      community.docker.docker_login:
+        registry_url: https://index.docker.io/v1/
+        username: "{{ monitoring_registry_username }}"
+        password: "{{ monitoring_registry_password }}"
+      no_log: true
+      when:
+        - monitoring_registry_username | string | length > 0
+        - monitoring_registry_password | string | length > 0
+
+    - name: Deploy monitoring stack with Docker Compose v2
+      community.docker.docker_compose_v2:
+        project_src: "{{ monitoring_dir }}"
+        files:
+          - "{{ monitoring_compose_file }}"
+        pull: "{{ monitoring_compose_pull_policy }}"
+        recreate: "{{ monitoring_compose_recreate }}"
+        remove_orphans: "{{ monitoring_compose_remove_orphans | bool }}"
+        state: present
+        wait: "{{ monitoring_compose_wait | bool }}"
+        wait_timeout: "{{ monitoring_compose_wait_timeout | int }}"
+      register: monitoring_compose_result
+      retries: 3
+      delay: 10
+      until: monitoring_compose_result is succeeded
+
+    - name: Wait for exposed monitoring ports
+      ansible.builtin.wait_for:
+        host: "{{ monitoring_healthcheck_host }}"
+        port: "{{ item | int }}"
+        timeout: 60
+        delay: 1
+      loop:
+        - "{{ monitoring_loki_port }}"
+        - "{{ monitoring_promtail_port }}"
+        - "{{ monitoring_grafana_port }}"
+        - "{{ monitoring_python_port }}"
+        - "{{ monitoring_go_port }}"
+      delegate_to: "{{ monitoring_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Verify Loki readiness endpoint
+      ansible.builtin.uri:
+        url: "http://{{ monitoring_healthcheck_host }}:{{ monitoring_loki_port }}/ready"
+        method: GET
+        status_code: 200
+        return_content: true
+        timeout: "{{ monitoring_healthcheck_timeout | int }}"
+      register: monitoring_loki_ready
+      retries: "{{ monitoring_healthcheck_retries | int }}"
+      delay: "{{ monitoring_healthcheck_delay | int }}"
+      until:
+        - monitoring_loki_ready.status == 200
+        - "'ready' in (monitoring_loki_ready.content | default(''))"
+      delegate_to: "{{ monitoring_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Verify Promtail targets endpoint
+      ansible.builtin.uri:
+        url: "http://{{ monitoring_healthcheck_host }}:{{ monitoring_promtail_port }}/targets"
+        method: GET
+        status_code: 200
+        timeout: "{{ monitoring_healthcheck_timeout | int }}"
+      register: monitoring_promtail_targets
+      retries: "{{ monitoring_healthcheck_retries | int }}"
+      delay: "{{ monitoring_healthcheck_delay | int }}"
+      until: monitoring_promtail_targets.status == 200
+      delegate_to: "{{ monitoring_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Verify Grafana API health
+      ansible.builtin.uri:
+        url: "http://{{ monitoring_healthcheck_host }}:{{ monitoring_grafana_port }}/api/health"
+        method: GET
+        status_code: 200
+        timeout: "{{ monitoring_healthcheck_timeout | int }}"
+      register: monitoring_grafana_health
+      retries: "{{ monitoring_healthcheck_retries | int }}"
+      delay: "{{ monitoring_healthcheck_delay | int }}"
+      until: monitoring_grafana_health.status == 200
+      delegate_to: "{{ monitoring_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Verify Grafana requires authentication
+      ansible.builtin.uri:
+        url: "http://{{ monitoring_healthcheck_host }}:{{ monitoring_grafana_port }}/api/user"
+        method: GET
+        status_code: 401
+        timeout: "{{ monitoring_healthcheck_timeout | int }}"
+      register: monitoring_grafana_auth_gate
+      retries: "{{ monitoring_healthcheck_retries | int }}"
+      delay: "{{ monitoring_healthcheck_delay | int }}"
+      until: monitoring_grafana_auth_gate.status == 401
+      delegate_to: "{{ monitoring_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Verify Python application health endpoint
+      ansible.builtin.uri:
+        url: "http://{{ monitoring_healthcheck_host }}:{{ monitoring_python_port }}{{ monitoring_python_health_path }}"
+        method: GET
+        status_code: 200
+        return_content: true
+        timeout: "{{ monitoring_healthcheck_timeout | int }}"
+      register: monitoring_python_health
+      retries: "{{ monitoring_healthcheck_retries | int }}"
+      delay: "{{ monitoring_healthcheck_delay | int }}"
+      until:
+        - monitoring_python_health.status == 200
+        - monitoring_python_health.json.status | default('') == 'healthy'
+      delegate_to: "{{ monitoring_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Verify Go application health endpoint
+      ansible.builtin.uri:
+        url: "http://{{ monitoring_healthcheck_host }}:{{ monitoring_go_port }}{{ monitoring_go_health_path }}"
+        method: GET
+        status_code: 200
+        return_content: true
+        timeout: "{{ monitoring_healthcheck_timeout | int }}"
+      register: monitoring_go_health
+      retries: "{{ monitoring_healthcheck_retries | int }}"
+      delay: "{{ monitoring_healthcheck_delay | int }}"
+      until:
+        - monitoring_go_health.status == 200
+        - monitoring_go_health.json.status | default('') == 'healthy'
+      delegate_to: "{{ monitoring_healthcheck_delegate_to }}"
+      become: false
+
+    - name: Read external Go healthcheck container info
+      community.docker.docker_container_info:
+        name: "{{ monitoring_project_name }}-app-go-healthcheck-1"
+      register: monitoring_go_healthcheck_container
+      when: monitoring_go_external_healthcheck_enabled | bool
+
+    - name: Assert external Go healthcheck is healthy
+      ansible.builtin.assert:
+        that:
+          - monitoring_go_healthcheck_container.exists | bool
+          - monitoring_go_healthcheck_container.container.State.Health.Status == 'healthy'
+        fail_msg: External Go healthcheck container is not healthy.
+      when: monitoring_go_external_healthcheck_enabled | bool
+
+  rescue:
+    - name: Capture docker compose status after failed monitoring deployment
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - -f
+          - "{{ monitoring_dir }}/{{ monitoring_compose_file }}"
+          - ps
+          - --all
+      register: monitoring_compose_ps
+      changed_when: false
+      failed_when: false
+
+    - name: Fail deployment with compose status context
+      ansible.builtin.fail:
+        msg: >-
+          Monitoring deployment failed. Compose status:
+          {{ monitoring_compose_ps.stdout | default('no compose status available') }}

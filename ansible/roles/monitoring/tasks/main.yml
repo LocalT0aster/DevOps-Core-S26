@@ -1,0 +1,8 @@
+---
+- name: Prepare monitoring stack files
+  ansible.builtin.include_tasks:
+    file: setup.yml
+
+- name: Deploy monitoring stack
+  ansible.builtin.include_tasks:
+    file: deploy.yml
