@@ -15,7 +15,7 @@ try:
 except ImportError:  # pragma: no cover - allows `python src/main.py`
     from flask_instance import START_TIME, app, logger
 
-__version__ = "1.0.0"
+__version__ = "1.7.0"
 
 
 def get_service_info() -> dict[str, str]:

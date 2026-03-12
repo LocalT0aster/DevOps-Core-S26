@@ -4,20 +4,23 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	serviceName        = "devops-info-service"
-	serviceVersion     = "1.0.0"
+	serviceVersion     = "1.7.0"
 	serviceDescription = "DevOps course info service"
 	serviceFramework   = "Go net/http"
+	serviceLoggerName  = "devops_info_service"
+	accessLoggerName   = "http.access"
 )
 
 type ServiceInfo struct {
@@ -71,12 +74,20 @@ type HealthResponse struct {
 var (
 	// startTime is used for uptime calculations.
 	startTime = time.Now().UTC()
+	logMu     sync.Mutex
+	logOutput io.Writer = os.Stdout
 	// endpoints is a static list used to mirror the Python app output.
 	endpoints = []EndpointInfo{
 		{Path: "/", Method: http.MethodGet, Description: "Service information."},
 		{Path: "/health", Method: http.MethodGet, Description: "Health check endpoint."},
 	}
 )
+
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode   int
+	bytesWritten int
+}
 
 // getServiceInfo returns static service metadata.
 func getServiceInfo() ServiceInfo {
@@ -195,6 +206,61 @@ func listEndpoints() []EndpointInfo {
 	return endpoints
 }
 
+func newResponseRecorder(w http.ResponseWriter) *responseRecorder {
+	return &responseRecorder{
+		ResponseWriter: w,
+		statusCode:     http.StatusOK,
+	}
+}
+
+func (recorder *responseRecorder) WriteHeader(statusCode int) {
+	recorder.statusCode = statusCode
+	recorder.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (recorder *responseRecorder) Write(data []byte) (int, error) {
+	written, err := recorder.ResponseWriter.Write(data)
+	recorder.bytesWritten += written
+	return written, err
+}
+
+func emitLog(level, loggerName, message string, fields map[string]any) {
+	payload := map[string]any{
+		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		"level":     level,
+		"logger":    loggerName,
+	}
+
+	if message != "" {
+		payload["message"] = message
+	}
+
+	for key, value := range fields {
+		payload[key] = value
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to marshal log entry: %v\n", err)
+		return
+	}
+
+	logMu.Lock()
+	defer logMu.Unlock()
+
+	if _, err := fmt.Fprintln(logOutput, string(encoded)); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to write log entry: %v\n", err)
+	}
+}
+
+func queryString(r *http.Request) string {
+	if r.URL.RawQuery == "" {
+		return ""
+	}
+
+	return "?" + r.URL.RawQuery
+}
+
 // mainHandler serves GET /.
 func mainHandler(w http.ResponseWriter, r *http.Request) {
 	payload := RootResponse{
@@ -244,15 +310,41 @@ func recoverMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Printf("panic: %v", err)
+				emitLog("ERROR", serviceLoggerName, "request panic recovered", map[string]any{
+					"error":      fmt.Sprint(err),
+					"client_ip":  clientIP(r),
+					"method":     r.Method,
+					"path":       r.URL.Path,
+					"query":      queryString(r),
+					"user_agent": r.Header.Get("User-Agent"),
+				})
 				writeJSON(w, http.StatusInternalServerError, map[string]string{
 					"error":   "Internal Server Error",
 					"message": "An unexpected error occurred",
 				})
 			}
 		}()
-		log.Printf("Request: %s %s", r.Method, r.URL.Path)
 		next.ServeHTTP(w, r)
+	})
+}
+
+func requestLoggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		startedAt := time.Now()
+		recorder := newResponseRecorder(w)
+
+		next.ServeHTTP(recorder, r)
+
+		emitLog("INFO", accessLoggerName, "", map[string]any{
+			"client_ip":       clientIP(r),
+			"method":          r.Method,
+			"path":            r.URL.Path,
+			"query":           queryString(r),
+			"status_code":     recorder.statusCode,
+			"response_bytes":  fmt.Sprintf("%d", recorder.bytesWritten),
+			"request_time_us": time.Since(startedAt).Microseconds(),
+			"user_agent":      r.Header.Get("User-Agent"),
+		})
 	})
 }
 
@@ -261,7 +353,10 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Printf("encode error: %v", err)
+		emitLog("ERROR", serviceLoggerName, "failed to encode response", map[string]any{
+			"status_code": status,
+			"error":       err.Error(),
+		})
 	}
 }
 
@@ -277,10 +372,17 @@ func main() {
 	}
 
 	addr := net.JoinHostPort(host, port)
-	log.Printf("Application starting on %s", addr)
+	emitLog("INFO", serviceLoggerName, "application starting", map[string]any{
+		"address": addr,
+		"service": serviceName,
+		"version": serviceVersion,
+	})
 
-	handler := recoverMiddleware(http.HandlerFunc(router))
+	handler := requestLoggingMiddleware(recoverMiddleware(http.HandlerFunc(router)))
 	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatalf("server error: %v", err)
+		emitLog("ERROR", serviceLoggerName, "server error", map[string]any{
+			"error": err.Error(),
+		})
+		os.Exit(1)
 	}
 }
