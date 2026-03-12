@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir "poetry==$POETRY_VERSION" \
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml poetry.lock gunicorn.conf.py ./
 RUN poetry config virtualenvs.create false \
     && poetry install --only main --no-interaction --no-ansi --no-root
 
@@ -20,4 +20,4 @@ ENV PORT=5000
 ENV HOST="0.0.0.0"
 
 USER appuser
-CMD ["sh", "-c", "gunicorn --bind ${HOST:-0.0.0.0}:${PORT:-5000} src.main:app"]
+CMD ["sh", "-c", "gunicorn --config /app/gunicorn.conf.py src.main:app"]

@@ -1,0 +1,187 @@
+services:
+  loki:
+    image: grafana/loki:3.0.0
+    command:
+      - -config.file=/etc/loki/config.yml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --no-verbose --tries=1 --spider http://127.0.0.1:3100/ready || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    command:
+      - -config.file=/etc/promtail/config.yml
+    user: "0:0"
+    depends_on:
+      loki:
+        condition: service_healthy
+    ports:
+      - "9080:9080"
+    volumes:
+      - ./promtail/config.yml:/etc/promtail/config.yml:ro
+      - promtail-data:/run/promtail
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.3.1
+    depends_on:
+      loki:
+        condition: service_healthy
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set in monitoring/.env}
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/health || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  app-python:
+    image: localt0aster/devops-app-py:1.7.9a42ee5
+    # Re-enable local builds if Docker networking breaks behind the tun/VPN setup.
+    # build:
+    #   context: ../app_python
+    #   network: host
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    labels:
+      logging: "promtail"
+      app: "devops-python"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget --no-verbose --tries=1 --spider http://127.0.0.1:8000/health || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  app-go:
+    image: localt0aster/devops-app-go:1.7.9a42ee5
+    # Re-enable local builds if Docker networking breaks behind the tun/VPN setup.
+    # build:
+    #   context: ../app_go
+    #   network: host
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8001"
+    ports:
+      - "8001:8001"
+    labels:
+      logging: "promtail"
+      app: "devops-go"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  app-go-healthcheck:
+    image: curlimages/curl:8.18.0
+    command:
+      - sh
+      - -c
+      - sleep infinity
+    depends_on:
+      - app-go
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://app-go:8001/health >/dev/null || exit 1
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 64M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+volumes:
+  loki-data:
+  promtail-data:
+  grafana-data:
+
+networks:
+  monitoring:
