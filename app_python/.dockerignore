@@ -2,3 +2,4 @@
 !src/**
 !pyproject.toml
 !poetry.lock
+!gunicorn.conf.py
