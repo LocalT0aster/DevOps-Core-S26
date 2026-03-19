@@ -4,11 +4,11 @@
 
 ## Overview
 
-Small Flask web service that reports service metadata, system information, runtime uptime, and basic request details. Includes a simple health check endpoint for monitoring.
+Small Flask web service that reports service metadata, system information, runtime uptime, and basic request details. Includes health and Prometheus metrics endpoints for monitoring.
 
 ## Prerequisites
 
-- Python 3.13+
+- Python 3.14+
 - Poetry
 
 ## Installation
@@ -54,6 +54,7 @@ Gunicorn access logs are emitted as JSON so Loki can parse request fields cleanl
 
 - `GET /` - Service and system information
 - `GET /health` - Health check
+- `GET /metrics` - Prometheus metrics exposition
 
 ## Configuration
 
