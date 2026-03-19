@@ -85,7 +85,7 @@ if [ ! -f /shared/github-runner.env ]; then
     cat <<'EOF'
 GitHub runner base installation complete.
 Create /shared/github-runner.env from /shared/github-runner.env.example,
-fill in GH_RUNNER_URL and GH_RUNNER_TOKEN, then run:
+fill in GH_RUNNER_URL and either GH_RUNNER_API_TOKEN (preferred) or GH_RUNNER_TOKEN, then run:
   vagrant provision github-runner --provision-with github-runner-register
 EOF
 fi
