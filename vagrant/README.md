@@ -113,14 +113,16 @@ cp shared/github-runner.env.example shared/github-runner.env
 2. Edit `shared/github-runner.env` and fill in:
 
 - `GH_RUNNER_URL`
-- `GH_RUNNER_TOKEN`
+- `GH_RUNNER_API_TOKEN` or `GH_RUNNER_TOKEN`
 - optional runner name / labels / group / workdir
 
-If the runner VM is already running, sync the updated file into the guest:
+`GH_RUNNER_API_TOKEN` is the safer option because the provisioner will exchange it for a fresh one-hour runner registration token every time it runs. For a repository runner, GitHub's REST API requires a token that can create registration tokens for that repository. For a fine-grained PAT, that means repository `Administration: write`. A manually copied `GH_RUNNER_TOKEN` still works, but it expires after one hour and must be refreshed before provisioning.
 
-```bash
-vagrant rsync github-runner
-```
+> ❗ If the runner VM is already running, don't forget to sync the updated shared files into the guest:
+> 
+> ```bash
+> vagrant rsync github-runner
+> ```
 
 3. Run the registration provisioner:
 
