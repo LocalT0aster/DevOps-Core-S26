@@ -1,4 +1,4 @@
-# LAB08 - Metrics and Monitoring (Task 2)
+# LAB08 - Metrics and Monitoring (Tasks 2-3)
 
 ## 1. Overview
 
@@ -168,3 +168,104 @@ $ curl -fSsG --data-urlencode 'query=up' http://127.0.0.1:9090/api/v1/query | jq
 
 - Grafana reported `DOWN` on the very first Prometheus scrape because the container was still starting; it flipped to `UP` on the next 15-second scrape without any config change.
 - The stack is currently running locally, so `http://localhost:9090/targets` and `http://localhost:9090/graph?g0.expr=up` can be opened directly for manual inspection.
+
+## 5. Task 3 Overview
+
+A custom Grafana dashboard was created and exported to `monitoring/docs/dashbboard.json`.
+
+During documentation review, the exported dashboard JSON was corrected in two places so it matches the actual app metrics from Task 1:
+
+- `status` was changed to `status_code` in the status distribution and error-rate queries
+- the `Request Duration p95` panel type was changed from `heatmap` to `timeseries`
+
+## 6. Dashboard Panels
+
+- `Status Code Distribution` (`piechart`): `sum by (status_code) (rate(http_requests_total[5m]))`
+- `Uptime` (`stat`): `up{job="app"}`
+- `Active Requests` (`timeseries`): `http_requests_in_progress`
+- `Error Rate` (`timeseries`): `sum(rate(http_requests_total{status_code=~"5.."}[5m]))`
+- `Request Rate` (`timeseries`): `sum(rate(http_requests_total[5m])) by (endpoint)`
+- `Request Duration p95` (`timeseries`): `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))`
+- `Request Duration Heatmap` (`heatmap`): `rate(http_request_duration_seconds_bucket[5m])`
+
+## 7. Task 3 Commands Used
+
+```bash
+PS1="$ "
+cd monitoring
+curl -fSsG --data-urlencode 'query=http_requests_total' http://127.0.0.1:9090/api/v1/query \
+  | jq '{status, data: {resultType: .data.resultType, resultCount: (.data.result | length), result: .data.result[0:4]}}' \
+  | tee /tmp/lab08_task3_requests_total.json
+curl -fSsG --data-urlencode 'query=http_requests_total{method="GET"}' http://127.0.0.1:9090/api/v1/query \
+  | jq '{status, data: {resultType: .data.resultType, resultCount: (.data.result | length), result: .data.result[0:4]}}' \
+  | tee /tmp/lab08_task3_requests_get.json
+curl -fSsG --data-urlencode 'query=devops_info_endpoint_calls_total' http://127.0.0.1:9090/api/v1/query \
+  | jq '{status, data: {resultType: .data.resultType, resultCount: (.data.result | length), result: .data.result[0:4]}}' \
+  | tee /tmp/lab08_task3_endpoint_calls.json
+jq '{title, panels: [.panels[] | {title, type, expr: .targets[0].expr}]}' monitoring/docs/dashbboard.json \
+  | tee /tmp/lab08_task3_dashboard_summary.json
+```
+
+## 8. Task 3 Evidence
+
+Exported dashboard JSON:
+
+- `monitoring/docs/dashbboard.json`
+
+Custom dashboard screenshot:
+
+![](img/lab08_task3_custom_dashboard.png)
+
+<details>
+<summary><code>dashboard export summary</code> output</summary>
+
+```json
+$ jq '{title, panels: [.panels[] | {title, type, expr: .targets[0].expr}]}' monitoring/docs/dashbboard.json | tee /tmp/lab08_task3_dashboard_summary.json
+{
+  "title": "Custom",
+  "panels": [
+    {
+      "title": "Status Code Distribution",
+      "type": "piechart",
+      "expr": "sum by (status_code) (rate(http_requests_total[5m]))"
+    },
+    {
+      "title": "Uptime",
+      "type": "stat",
+      "expr": "up{job=\"app\"}"
+    },
+    {
+      "title": "Active Requests",
+      "type": "timeseries",
+      "expr": "http_requests_in_progress"
+    },
+    {
+      "title": "Error Rate",
+      "type": "timeseries",
+      "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m]))"
+    },
+    {
+      "title": "Request Rate",
+      "type": "timeseries",
+      "expr": "sum(rate(http_requests_total[5m])) by (endpoint)"
+    },
+    {
+      "title": "Request Duration p95",
+      "type": "timeseries",
+      "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))"
+    },
+    {
+      "title": "Request Duration Heatmap",
+      "type": "heatmap",
+      "expr": "rate(http_request_duration_seconds_bucket[5m])"
+    }
+  ]
+}
+```
+
+</details>
+
+## 9. Task 3 Notes
+
+- The exported filename is kept as `dashbboard.json` because that is the currently staged artifact.
+- The error-rate query currently returns no samples for the present scrape window, which is expected while the app is healthy and no `5xx` responses are being generated.
