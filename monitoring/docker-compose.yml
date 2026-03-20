@@ -90,12 +90,29 @@ services:
       - monitoring
     restart: unless-stopped
 
+  prometheus:
+    image: prom/prometheus:v3.9.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - monitoring
+    restart: unless-stopped
+
   app-python:
-    image: localt0aster/devops-app-py:1.7.9a42ee5
-    # Re-enable local builds if Docker networking breaks behind the tun/VPN setup.
-    # build:
-    #   context: ../app_python
-    #   network: host
+    image: localt0aster/devops-app-py:1.8.806c77e
     environment:
       HOST: "0.0.0.0"
       PORT: "8000"
@@ -182,6 +199,7 @@ volumes:
   loki-data:
   promtail-data:
   grafana-data:
+  prometheus-data:
 
 networks:
   monitoring:
