@@ -62,6 +62,7 @@ def test_index_returns_expected_json_structure_and_types(client):
     route_index = {(endpoint["method"], endpoint["path"]) for endpoint in endpoints}
     assert ("GET", "/") in route_index
     assert ("GET", "/health") in route_index
+    assert ("GET", "/metrics") in route_index
 
 
 def test_health_returns_expected_json_structure_and_types(client):
