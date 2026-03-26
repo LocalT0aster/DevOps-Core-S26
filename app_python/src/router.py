@@ -12,10 +12,20 @@ from flask import jsonify, request
 
 try:
     from .flask_instance import START_TIME, app, logger
+    from .metrics import (
+        DEVOPS_INFO_SYSTEM_INFO_DURATION_SECONDS,
+        generate_metrics_response,
+        record_endpoint_call,
+    )
 except ImportError:  # pragma: no cover - allows `python src/main.py`
     from flask_instance import START_TIME, app, logger
+    from metrics import (
+        DEVOPS_INFO_SYSTEM_INFO_DURATION_SECONDS,
+        generate_metrics_response,
+        record_endpoint_call,
+    )
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
 
 
 def get_service_info() -> dict[str, str]:
@@ -28,6 +38,7 @@ def get_service_info() -> dict[str, str]:
     }
 
 
+@DEVOPS_INFO_SYSTEM_INFO_DURATION_SECONDS.time()
 def get_platform_info() -> dict[str, str | int]:
     """Collect system information."""
 
@@ -120,6 +131,7 @@ def list_routes() -> list[dict[str, str]]:
 @app.route("/")
 def index():
     """Service information."""
+    record_endpoint_call("/")
     return jsonify(
         {
             "service": get_service_info(),
@@ -134,6 +146,7 @@ def index():
 @app.route("/health")
 def health():
     """Health check."""
+    record_endpoint_call("/health")
     return jsonify(
         {
             "status": "healthy",
@@ -141,6 +154,13 @@ def health():
             "uptime_seconds": get_uptime()["seconds"],
         }
     )
+
+
+@app.route("/metrics")
+def metrics():
+    """Prometheus metrics."""
+    record_endpoint_call("/metrics")
+    return generate_metrics_response()
 
 
 @app.errorhandler(404)
