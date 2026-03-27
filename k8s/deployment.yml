@@ -6,13 +6,13 @@ metadata:
     app.kubernetes.io/name: devops-app-py
     app.kubernetes.io/part-of: devops-core-s26
 spec:
-  replicas: 3
+  replicas: 5
   revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
-      maxUnavailable: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: devops-app-py
