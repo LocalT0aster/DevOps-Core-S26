@@ -1,29 +1,32 @@
-name: Python Snyk Scan
+name: Go Snyk Scan
 
 on:
   push:
     paths:
-      - app_python/**
-      - .github/actions/python-setup/**
-      - .github/workflows/python-snyk.yml
+      - app_go/**
+      - .github/workflows/go-snyk.yml
   pull_request:
     branches:
       - master
     paths:
-      - app_python/**
-      - .github/actions/python-setup/**
-      - .github/workflows/python-snyk.yml
+      - app_go/**
+      - .github/workflows/go-snyk.yml
 
 jobs:
   snyk:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./app_python
+        working-directory: ./app_go
     steps:
       - uses: actions/checkout@v6
-      - name: Setup Python tooling and dependencies
-        uses: ./.github/actions/python-setup
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: ./app_go/go.mod
+          cache-dependency-path: ./app_go/go.sum
+      - name: Download Go modules
+        run: go mod download
       - name: Setup Snyk CLI
         uses: snyk/actions/setup@master
       - name: Run Snyk dependency scan (or skip)
