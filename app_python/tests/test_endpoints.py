@@ -62,6 +62,7 @@ def test_index_returns_expected_json_structure_and_types(client):
     route_index = {(endpoint["method"], endpoint["path"]) for endpoint in endpoints}
     assert ("GET", "/") in route_index
     assert ("GET", "/health") in route_index
+    assert ("GET", "/ready") in route_index
     assert ("GET", "/metrics") in route_index
 
 
@@ -75,6 +76,23 @@ def test_health_returns_expected_json_structure_and_types(client):
 
     assert {"status", "timestamp", "uptime_seconds"} <= payload.keys()
     assert payload["status"] == "healthy"
+    assert isinstance(payload["uptime_seconds"], int)
+    assert payload["uptime_seconds"] >= 0
+
+    parsed_timestamp = datetime.fromisoformat(payload["timestamp"])
+    assert parsed_timestamp.tzinfo is not None
+
+
+def test_ready_returns_expected_json_structure_and_types(client):
+    """GET /ready should report ready status and typed runtime metadata."""
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload is not None
+
+    assert {"status", "timestamp", "uptime_seconds"} <= payload.keys()
+    assert payload["status"] == "ready"
     assert isinstance(payload["uptime_seconds"], int)
     assert payload["uptime_seconds"] >= 0
 
@@ -111,6 +129,19 @@ def test_health_returns_json_500_when_uptime_probe_fails(client, monkeypatch):
     monkeypatch.setattr(router, "get_uptime", _raise_runtime_error)
 
     response = client.get("/health")
+
+    assert response.status_code == 500
+    assert response.get_json() == {
+        "error": "Internal Server Error",
+        "message": "An unexpected error occurred",
+    }
+
+
+def test_ready_returns_json_500_when_uptime_probe_fails(client, monkeypatch):
+    """GET /ready should return JSON 500 when uptime collection crashes."""
+    monkeypatch.setattr(router, "get_uptime", _raise_runtime_error)
+
+    response = client.get("/ready")
 
     assert response.status_code == 500
     assert response.get_json() == {
