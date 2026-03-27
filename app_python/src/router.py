@@ -147,9 +147,21 @@ def index():
 def health():
     """Health check."""
     record_endpoint_call("/health")
+    return _status_response("healthy")
+
+
+@app.route("/ready")
+def readiness():
+    """Readiness check."""
+    record_endpoint_call("/ready")
+    return _status_response("ready")
+
+
+def _status_response(status: str):
+    """Return a shared JSON payload for health-style endpoints."""
     return jsonify(
         {
-            "status": "healthy",
+            "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "uptime_seconds": get_uptime()["seconds"],
         }

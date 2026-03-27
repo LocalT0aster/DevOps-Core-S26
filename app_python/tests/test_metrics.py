@@ -40,6 +40,7 @@ def test_metrics_endpoint_exposes_http_and_application_metrics(client):
     """Metrics endpoint should expose HTTP RED data and app-specific metrics."""
     client.get("/")
     client.get("/health")
+    client.get("/ready")
     client.get("/does-not-exist")
 
     response = client.get("/metrics")
@@ -57,6 +58,11 @@ def test_metrics_endpoint_exposes_http_and_application_metrics(client):
         metrics_text,
         "http_requests_total",
         {"method": "GET", "endpoint": "/health", "status_code": "200"},
+    )
+    ready_total = _metric_value(
+        metrics_text,
+        "http_requests_total",
+        {"method": "GET", "endpoint": "/ready", "status_code": "200"},
     )
     unmatched_total = _metric_value(
         metrics_text,
@@ -85,6 +91,7 @@ def test_metrics_endpoint_exposes_http_and_application_metrics(client):
 
     assert root_total is not None and root_total >= 1.0
     assert health_total is not None and health_total >= 1.0
+    assert ready_total is not None and ready_total >= 1.0
     assert unmatched_total is not None and unmatched_total >= 1.0
     assert root_duration_count is not None and root_duration_count >= 1.0
     assert root_in_progress == 0.0
