@@ -31,6 +31,7 @@ jobs:
             lab_number=$((10#$lab_number))
             short_sha="${GITHUB_SHA::7}"
             echo "branch_tag=1.${lab_number}.${short_sha}" >> "$GITHUB_OUTPUT"
+            echo "branch_dev_tag=1.${lab_number}-dev" >> "$GITHUB_OUTPUT"
           else
             echo "Failed to extract lab number from branch: $source_branch" >&2
             exit 1
@@ -48,6 +49,8 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:${{ steps.version.outputs.branch_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:${{ steps.version.outputs.branch_dev_tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/devops-app-py:dev
 
   build-and-push:
     if: github.event.pull_request.merged == true
