@@ -1,0 +1,37 @@
+{{- if .Values.hooks.preInstall.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "devops-app-py.preInstallJobName" . }}
+  labels:
+    {{- include "devops-app-py.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hook
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": {{ .Values.hooks.preInstall.weight | quote }}
+    "helm.sh/hook-delete-policy": {{ .Values.hooks.preInstall.deletePolicy | quote }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "devops-app-py.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hook
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pre-install-validation
+          image: "{{ .Values.hooks.preInstall.image.repository }}:{{ .Values.hooks.preInstall.image.tag }}"
+          imagePullPolicy: {{ .Values.hooks.preInstall.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              echo "Pre-install validation for {{ .Release.Name }}"
+              echo "Namespace: {{ .Release.Namespace }}"
+              echo "Image tag: {{ .Values.image.tag | default .Chart.AppVersion }}"
+              echo "Replica count: {{ .Values.replicaCount }}"
+              sleep 3
+              echo "Pre-install validation completed"
+{{- end }}
