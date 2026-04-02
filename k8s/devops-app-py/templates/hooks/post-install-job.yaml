@@ -1,0 +1,47 @@
+{{- if .Values.hooks.postInstall.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "devops-app-py.postInstallJobName" . }}
+  labels:
+    {{- include "devops-app-py.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hook
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": {{ .Values.hooks.postInstall.weight | quote }}
+    "helm.sh/hook-delete-policy": {{ .Values.hooks.postInstall.deletePolicy | quote }}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "devops-app-py.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: hook
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: post-install-smoke-test
+          image: "{{ .Values.hooks.postInstall.image.repository }}:{{ .Values.hooks.postInstall.image.tag }}"
+          imagePullPolicy: {{ .Values.hooks.postInstall.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              url="http://{{ include "devops-app-py.serviceName" . }}:{{ .Values.service.port }}/ready"
+              attempt=1
+              while [ "$attempt" -le {{ .Values.hooks.postInstall.maxAttempts }} ]; do
+                code="$(curl -sS -o /tmp/ready.json -w "%{http_code}" "$url" || true)"
+                if [ "$code" = "200" ]; then
+                  echo "Smoke test passed on attempt ${attempt}"
+                  cat /tmp/ready.json
+                  sleep 3
+                  exit 0
+                fi
+                echo "Attempt ${attempt} returned ${code}"
+                attempt=$((attempt + 1))
+                sleep {{ .Values.hooks.postInstall.retryIntervalSeconds }}
+              done
+              echo "Smoke test failed for ${url}"
+              exit 1
+{{- end }}

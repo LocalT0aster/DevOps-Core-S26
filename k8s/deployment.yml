@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: devops-app-py
-          image: localt0aster/devops-app-py:1.9-dev
+          image: localt0aster/devops-app-py:1.9
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
