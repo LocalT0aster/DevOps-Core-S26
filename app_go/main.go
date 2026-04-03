@@ -20,7 +20,7 @@ import (
 
 const (
 	serviceName        = "devops-info-service"
-	serviceVersion     = "1.8.0"
+	serviceVersion     = "1.10.0"
 	serviceDescription = "DevOps course info service"
 	serviceFramework   = "Go net/http"
 	serviceLoggerName  = "devops_info_service"
