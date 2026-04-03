@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - allows `python src/main.py`
         record_endpoint_call,
     )
 
-__version__ = "1.8.0"
+__version__ = "1.10.0"
 
 
 def get_service_info() -> dict[str, str]:

@@ -1,0 +1,9 @@
+1. Review the release:
+  helm status {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+2. Forward the service locally:
+  kubectl port-forward svc/{{ include "devops-app-py.serviceName" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+3. Verify the application:
+  curl -fsSL http://127.0.0.1:8080/health | jq
+  curl -fsSL http://127.0.0.1:8080/ready | jq
