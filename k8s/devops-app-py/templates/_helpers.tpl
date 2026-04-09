@@ -66,6 +66,27 @@ Create the secret name.
 {{- end }}
 
 {{/*
+Create the file ConfigMap name.
+*/}}
+{{- define "devops-app-py.fileConfigMapName" -}}
+{{- printf "%s-config" (include "devops-app-py.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Create the env ConfigMap name.
+*/}}
+{{- define "devops-app-py.envConfigMapName" -}}
+{{- printf "%s-env" (include "devops-app-py.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Create the PVC name.
+*/}}
+{{- define "devops-app-py.pvcName" -}}
+{{- printf "%s-data" (include "devops-app-py.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Create the service account name.
 */}}
 {{- define "devops-app-py.serviceAccountName" -}}
@@ -83,6 +104,25 @@ Render non-secret environment variables.
 {{- range .Values.env }}
 - name: {{ .name }}
   value: {{ .value | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+Render the chart-managed config.json file.
+*/}}
+{{- define "devops-app-py.renderedConfigJson" -}}
+{{- tpl (.Files.Get "files/config.json") . -}}
+{{- end }}
+
+{{/*
+Render pod checksum annotations for config-driven rollouts.
+*/}}
+{{- define "devops-app-py.configChecksums" -}}
+{{- if .Values.config.file.enabled }}
+checksum/config-file: {{ include "devops-app-py.renderedConfigJson" . | sha256sum | quote }}
+{{- end }}
+{{- if .Values.config.env.enabled }}
+checksum/config-env: {{ toJson .Values.config.env.data | sha256sum | quote }}
 {{- end }}
 {{- end }}
 

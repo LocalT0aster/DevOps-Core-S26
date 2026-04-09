@@ -1,0 +1,17 @@
+{
+  "application": {
+    "name": {{ .Values.config.file.appName | quote }},
+    "environment": {{ .Values.config.file.environment | quote }},
+    "version": {{ (.Values.image.tag | default .Chart.AppVersion) | quote }}
+  },
+  "featureFlags": {
+    "visitsCounter": {{ .Values.config.file.featureFlags.visitsCounter }},
+    "metrics": {{ .Values.config.file.featureFlags.metrics }},
+    "configReloadDemo": {{ .Values.config.file.featureFlags.configReloadDemo }}
+  },
+  "settings": {
+    "configPath": {{ printf "%s/config.json" .Values.config.mountPath | quote }},
+    "visitsFile": {{ printf "%s/visits" .Values.persistence.mountPath | quote }},
+    "reloadStrategy": "checksum-rollout"
+  }
+}

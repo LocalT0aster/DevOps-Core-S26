@@ -1,9 +1,9 @@
-replicaCount: 5
+replicaCount: 1
 partOf: devops-core-s26
 
 image:
   repository: localt0aster/devops-app-py
-  tag: "1.9"
+  tag: "1.12-dev"
   pullPolicy: IfNotPresent
 
 containerPort: 5000
@@ -26,6 +26,31 @@ env:
   - name: PORT
     value: "5000"
 
+config:
+  mountPath: /config
+  file:
+    enabled: true
+    appName: "devops-info-service"
+    environment: "development"
+    featureFlags:
+      visitsCounter: true
+      metrics: true
+      configReloadDemo: true
+  env:
+    enabled: true
+    data:
+      APP_NAME: "devops-info-service"
+      APP_ENV: "development"
+      APP_CONFIG_PATH: "/config/config.json"
+      APP_VISITS_PATH: "/data/visits"
+      LOG_LEVEL: "info"
+
+persistence:
+  enabled: true
+  mountPath: /data
+  size: 100Mi
+  storageClass: ""
+
 secrets:
   enabled: true
   stringData:
@@ -46,7 +71,7 @@ service:
   type: NodePort
   port: 80
   targetPort: 5000
-  nodePort: 30080
+  nodePort: 30082
 
 resources:
   requests:
