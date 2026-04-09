@@ -59,6 +59,52 @@ Create the service name.
 {{- end }}
 
 {{/*
+Create the secret name.
+*/}}
+{{- define "devops-app-py.secretName" -}}
+{{- printf "%s-secret" (include "devops-app-py.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Create the service account name.
+*/}}
+{{- define "devops-app-py.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "devops-app-py.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+Render non-secret environment variables.
+*/}}
+{{- define "devops-app-py.envVars" -}}
+{{- range .Values.env }}
+- name: {{ .name }}
+  value: {{ .value | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+Render Vault injector annotations.
+*/}}
+{{- define "devops-app-py.vaultAnnotations" -}}
+{{- if .Values.vault.enabled }}
+vault.hashicorp.com/agent-inject: "true"
+vault.hashicorp.com/role: {{ .Values.vault.role | quote }}
+vault.hashicorp.com/agent-inject-secret-config: {{ .Values.vault.secretPath | quote }}
+vault.hashicorp.com/agent-inject-file-config: {{ .Values.vault.templateFile | quote }}
+vault.hashicorp.com/agent-inject-template-config: |
+  {{ "{{- with secret \"" }}{{ .Values.vault.secretPath }}{{ "\" -}}" }}
+  APP_USERNAME={{ "{{ .Data.data.APP_USERNAME }}" }}
+  APP_PASSWORD={{ "{{ .Data.data.APP_PASSWORD }}" }}
+  APP_API_KEY={{ "{{ .Data.data.APP_API_KEY }}" }}
+  {{ "{{- end }}" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Create the pre-install hook job name.
 */}}
 {{- define "devops-app-py.preInstallJobName" -}}
