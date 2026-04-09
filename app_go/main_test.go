@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -79,6 +81,18 @@ func performRequest(handler http.Handler, method, path string) *httptest.Respons
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	return recorder
+}
+
+func withTempVisitsFile(t *testing.T) string {
+	t.Helper()
+
+	oldPath := visitsFilePath
+	visitsFilePath = filepath.Join(t.TempDir(), "visits")
+	t.Cleanup(func() {
+		visitsFilePath = oldPath
+	})
+
+	return visitsFilePath
 }
 
 func metricValue(metricsText, sampleName string, labels map[string]string) (float64, bool) {
@@ -194,6 +208,7 @@ func TestIndexReturnsExpectedJSONStructureAndTypes(t *testing.T) {
 
 	for _, route := range []string{
 		http.MethodGet + " /",
+		http.MethodGet + " /visits",
 		http.MethodGet + " /health",
 		http.MethodGet + " /ready",
 		http.MethodGet + " /metrics",
@@ -201,6 +216,121 @@ func TestIndexReturnsExpectedJSONStructureAndTypes(t *testing.T) {
 		if !routeIndex[route] {
 			t.Fatalf("expected endpoint %q to be listed", route)
 		}
+	}
+}
+
+func TestVisitsEndpointDefaultsToZeroWhenFileMissing(t *testing.T) {
+	restore := captureLogOutput(io.Discard)
+	defer restore()
+
+	withTempVisitsFile(t)
+
+	recorder := performRequest(http.HandlerFunc(router), http.MethodGet, "/visits")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	payload := decodeJSONResponse[VisitsResponse](t, recorder)
+	if payload.Visits != 0 {
+		t.Fatalf("expected visits to default to 0, got %d", payload.Visits)
+	}
+
+	if _, err := os.Stat(visitsFilePath); !os.IsNotExist(err) {
+		t.Fatalf("expected visits file to remain absent, got err=%v", err)
+	}
+}
+
+func TestRootIncrementsVisitsCounterAndPersistsFile(t *testing.T) {
+	restore := captureLogOutput(io.Discard)
+	defer restore()
+
+	withTempVisitsFile(t)
+
+	first := performRequest(http.HandlerFunc(router), http.MethodGet, "/")
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, first.Code)
+	}
+
+	payload := decodeJSONResponse[RootResponse](t, first)
+	routeIndex := map[string]bool{}
+	for _, endpoint := range payload.Endpoints {
+		routeIndex[endpoint.Method+" "+endpoint.Path] = true
+	}
+	for _, route := range []string{
+		http.MethodGet + " /",
+		http.MethodGet + " /visits",
+		http.MethodGet + " /health",
+		http.MethodGet + " /ready",
+		http.MethodGet + " /metrics",
+	} {
+		if !routeIndex[route] {
+			t.Fatalf("expected endpoint %q to be listed", route)
+		}
+	}
+
+	data, err := os.ReadFile(visitsFilePath)
+	if err != nil {
+		t.Fatalf("expected visits file to be created: %v", err)
+	}
+	if got := strings.TrimSpace(string(data)); got != "1" {
+		t.Fatalf("expected visits file to contain 1 after first root request, got %q", got)
+	}
+
+	second := performRequest(http.HandlerFunc(router), http.MethodGet, "/")
+	if second.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, second.Code)
+	}
+
+	data, err = os.ReadFile(visitsFilePath)
+	if err != nil {
+		t.Fatalf("expected visits file to remain readable: %v", err)
+	}
+	if got := strings.TrimSpace(string(data)); got != "2" {
+		t.Fatalf("expected visits file to contain 2 after second root request, got %q", got)
+	}
+
+	visits := performRequest(http.HandlerFunc(router), http.MethodGet, "/visits")
+	if visits.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, visits.Code)
+	}
+
+	count := decodeJSONResponse[VisitsResponse](t, visits)
+	if count.Visits != 2 {
+		t.Fatalf("expected visits endpoint to report 2, got %d", count.Visits)
+	}
+}
+
+func TestVisitsEndpointFallsBackToZeroForMalformedFile(t *testing.T) {
+	restore := captureLogOutput(io.Discard)
+	defer restore()
+
+	withTempVisitsFile(t)
+
+	if err := os.WriteFile(visitsFilePath, []byte("broken"), 0o644); err != nil {
+		t.Fatalf("failed to seed malformed visits file: %v", err)
+	}
+
+	recorder := performRequest(http.HandlerFunc(router), http.MethodGet, "/visits")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	payload := decodeJSONResponse[VisitsResponse](t, recorder)
+	if payload.Visits != 0 {
+		t.Fatalf("expected malformed counter to fall back to 0, got %d", payload.Visits)
+	}
+
+	after := performRequest(http.HandlerFunc(router), http.MethodGet, "/")
+	if after.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, after.Code)
+	}
+
+	data, err := os.ReadFile(visitsFilePath)
+	if err != nil {
+		t.Fatalf("expected visits file to be repaired by root request: %v", err)
+	}
+	if got := strings.TrimSpace(string(data)); got != "1" {
+		t.Fatalf("expected repaired visits file to contain 1, got %q", got)
 	}
 }
 
