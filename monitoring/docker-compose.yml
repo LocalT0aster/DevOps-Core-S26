@@ -133,12 +133,14 @@ services:
     restart: unless-stopped
 
   app-python:
-    image: localt0aster/devops-app-py:1.8
+    image: localt0aster/devops-app-py:1.12-dev
     environment:
       HOST: "0.0.0.0"
       PORT: "8000"
     ports:
       - "8000:8000"
+    volumes:
+      - ./data/app-python:/data
     labels:
       logging: "promtail"
       app: "devops-python"
@@ -163,7 +165,7 @@ services:
     restart: unless-stopped
 
   app-go:
-    image: localt0aster/devops-app-go:1.7.9a42ee5
+    image: localt0aster/devops-app-go:1.12-dev
     # Re-enable local builds if Docker networking breaks behind the tun/VPN setup.
     # build:
     #   context: ../app_go
@@ -173,6 +175,8 @@ services:
       PORT: "8001"
     ports:
       - "8001:8001"
+    volumes:
+      - ./data/app-go:/data
     labels:
       logging: "promtail"
       app: "devops-go"
