@@ -1,6 +1,6 @@
 [project]
 name = "devops-info-service"
-version = "1.10.0"
+version = "1.12.0"
 description = ""
 authors = [
     {name = "LocalT0aster",email = "90502400+LocalT0aster@users.noreply.github.com"}
