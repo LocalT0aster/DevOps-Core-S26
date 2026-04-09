@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 {{- $envVars := include "devops-app-py.envVars" . | trim }}
 {{- $vaultAnnotations := include "devops-app-py.vaultAnnotations" . | trim }}
+{{- $configChecksums := include "devops-app-py.configChecksums" . | trim }}
 metadata:
   name: {{ include "devops-app-py.fullname" . }}
   labels:
@@ -19,10 +20,13 @@ spec:
       {{- include "devops-app-py.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      {{- if or $vaultAnnotations .Values.podAnnotations }}
+      {{- if or $vaultAnnotations $configChecksums .Values.podAnnotations }}
       annotations:
         {{- if $vaultAnnotations }}
         {{- $vaultAnnotations | nindent 8 }}
+        {{- end }}
+        {{- if $configChecksums }}
+        {{- $configChecksums | nindent 8 }}
         {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
@@ -44,10 +48,28 @@ spec:
             - name: http
               containerPort: {{ .Values.containerPort }}
               protocol: TCP
-          {{- if .Values.secrets.enabled }}
+          {{- if or .Values.config.file.enabled .Values.persistence.enabled }}
+          volumeMounts:
+            {{- if .Values.config.file.enabled }}
+            - name: config-volume
+              mountPath: {{ .Values.config.mountPath | quote }}
+              readOnly: true
+            {{- end }}
+            {{- if .Values.persistence.enabled }}
+            - name: data-volume
+              mountPath: {{ .Values.persistence.mountPath | quote }}
+            {{- end }}
+          {{- end }}
+          {{- if or .Values.config.env.enabled .Values.secrets.enabled }}
           envFrom:
+            {{- if .Values.config.env.enabled }}
+            - configMapRef:
+                name: {{ include "devops-app-py.envConfigMapName" . }}
+            {{- end }}
+            {{- if .Values.secrets.enabled }}
             - secretRef:
                 name: {{ include "devops-app-py.secretName" . }}
+            {{- end }}
           {{- end }}
           {{- if $envVars }}
           env:
@@ -65,3 +87,16 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+      {{- if or .Values.config.file.enabled .Values.persistence.enabled }}
+      volumes:
+        {{- if .Values.config.file.enabled }}
+        - name: config-volume
+          configMap:
+            name: {{ include "devops-app-py.fileConfigMapName" . }}
+        {{- end }}
+        {{- if .Values.persistence.enabled }}
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: {{ include "devops-app-py.pvcName" . }}
+        {{- end }}
+      {{- end }}
