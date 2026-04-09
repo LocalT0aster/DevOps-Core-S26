@@ -12,5 +12,7 @@ The main deployment assets are:
 ## Documentation
 
 - [Helm Notes](HELM.md)
+- [Secrets Notes](SECRETS.md)
 - [Lab 09 - Kubernetes Basics](docs/LAB09.md)
 - [Lab 10 - Helm Package Manager](docs/LAB10.md)
+- [Lab 11 - Kubernetes Secrets and Vault](docs/LAB11.md)

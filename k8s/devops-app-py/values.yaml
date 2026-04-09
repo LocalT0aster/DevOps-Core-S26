@@ -26,6 +26,22 @@ env:
   - name: PORT
     value: "5000"
 
+secrets:
+  enabled: true
+  stringData:
+    APP_USERNAME: "placeholder-user"
+    APP_PASSWORD: "placeholder-password"
+
+serviceAccount:
+  create: true
+  name: ""
+
+vault:
+  enabled: false
+  role: "lab11-devops-app-py"
+  secretPath: "secret/data/lab11/devops-app-py"
+  templateFile: "app-config.env"
+
 service:
   type: NodePort
   port: 80
