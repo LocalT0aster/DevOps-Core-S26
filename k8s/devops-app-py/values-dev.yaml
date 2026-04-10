@@ -23,11 +23,13 @@ config:
 podLabels:
   environment: dev
 
+podAnnotations:
+  lab13-sync-wave: "1"
+
 service:
-  type: NodePort
+  type: ClusterIP
   port: 80
   targetPort: 5000
-  nodePort: 30082
 
 resources:
   requests:

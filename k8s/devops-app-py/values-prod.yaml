@@ -1,4 +1,4 @@
-replicaCount: 1
+replicaCount: 2
 
 image:
   tag: "1.12"
@@ -25,11 +25,13 @@ config:
 podLabels:
   environment: prod
 
+podAnnotations:
+  lab13-sync-wave: "1"
+
 service:
-  type: LoadBalancer
+  type: ClusterIP
   port: 80
   targetPort: 5000
-  nodePort: 30081
 
 resources:
   requests:

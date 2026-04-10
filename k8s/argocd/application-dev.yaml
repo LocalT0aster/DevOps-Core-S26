@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: devops-app-py-dev
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/LocalT0aster/DevOps-Core-S26.git
+    targetRevision: lab13
+    path: k8s/devops-app-py
+    helm:
+      releaseName: devops-app-py-dev
+      valueFiles:
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
