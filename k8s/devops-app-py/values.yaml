@@ -1,4 +1,4 @@
-replicaCount: 2
+replicaCount: 1
 partOf: devops-core-s26
 
 image:
