@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -20,7 +21,7 @@ import (
 
 const (
 	serviceName        = "devops-info-service"
-	serviceVersion     = "1.10.0"
+	serviceVersion     = "1.12.0"
 	serviceDescription = "DevOps course info service"
 	serviceFramework   = "Go net/http"
 	serviceLoggerName  = "devops_info_service"
@@ -75,11 +76,17 @@ type StatusResponse struct {
 	UptimeSeconds int64  `json:"uptime_seconds"`
 }
 
+type VisitsResponse struct {
+	Visits int `json:"visits"`
+}
+
 var (
 	// startTime is used for uptime calculations.
-	startTime = time.Now().UTC()
-	logMu     sync.Mutex
-	logOutput io.Writer = os.Stdout
+	startTime      = time.Now().UTC()
+	logMu          sync.Mutex
+	visitsMu       sync.Mutex
+	logOutput      io.Writer = os.Stdout
+	visitsFilePath           = "/data/visits"
 	// metricsRegistry only exposes service metrics, matching the Python app.
 	metricsRegistry   = prometheus.NewRegistry()
 	httpRequestsTotal = prometheus.NewCounterVec(
@@ -123,6 +130,7 @@ var (
 	// endpoints is a static list used to mirror the Python app output.
 	endpoints = []EndpointInfo{
 		{Path: "/", Method: http.MethodGet, Description: "Service information."},
+		{Path: "/visits", Method: http.MethodGet, Description: "Visits counter."},
 		{Path: "/health", Method: http.MethodGet, Description: "Health check."},
 		{Path: "/ready", Method: http.MethodGet, Description: "Readiness check."},
 		{Path: "/metrics", Method: http.MethodGet, Description: "Prometheus metrics."},
@@ -260,6 +268,72 @@ func clientIP(r *http.Request) string {
 	return r.RemoteAddr
 }
 
+func readVisitsCount() int {
+	data, err := os.ReadFile(visitsFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0
+		}
+
+		emitLog("WARNING", serviceLoggerName, "failed to read visits counter", map[string]any{
+			"error": err.Error(),
+			"path":  visitsFilePath,
+		})
+		return 0
+	}
+
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		emitLog("WARNING", serviceLoggerName, "invalid visits counter, resetting to zero", map[string]any{
+			"path":  visitsFilePath,
+			"value": "",
+		})
+		return 0
+	}
+
+	count, err := strconv.Atoi(trimmed)
+	if err != nil || count < 0 {
+		emitLog("WARNING", serviceLoggerName, "invalid visits counter, resetting to zero", map[string]any{
+			"path":  visitsFilePath,
+			"value": trimmed,
+		})
+		return 0
+	}
+
+	return count
+}
+
+func writeVisitsCount(count int) error {
+	if err := os.MkdirAll(filepath.Dir(visitsFilePath), 0o755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(visitsFilePath, []byte(fmt.Sprintf("%d\n", count)), 0o644)
+}
+
+func getVisitsCount() int {
+	visitsMu.Lock()
+	defer visitsMu.Unlock()
+
+	return readVisitsCount()
+}
+
+func incrementVisitsCount() int {
+	visitsMu.Lock()
+	defer visitsMu.Unlock()
+
+	count := readVisitsCount() + 1
+	if err := writeVisitsCount(count); err != nil {
+		emitLog("WARNING", serviceLoggerName, "failed to persist visits counter", map[string]any{
+			"error": err.Error(),
+			"path":  visitsFilePath,
+			"value": count,
+		})
+	}
+
+	return count
+}
+
 // listEndpoints returns the advertised endpoints for the root response.
 func listEndpoints() []EndpointInfo {
 	return endpoints
@@ -267,7 +341,7 @@ func listEndpoints() []EndpointInfo {
 
 func normalizeEndpointLabel(path string) string {
 	switch path {
-	case "/", "/health", "/metrics", "/ready":
+	case "/", "/health", "/metrics", "/ready", "/visits":
 		return path
 	default:
 		return "unmatched"
@@ -336,6 +410,7 @@ func queryString(r *http.Request) string {
 // mainHandler serves GET /.
 func mainHandler(w http.ResponseWriter, r *http.Request) {
 	recordEndpointCall("/")
+	incrementVisitsCount()
 	payload := RootResponse{
 		Service:   getServiceInfo(),
 		System:    getSystemInfo(),
@@ -345,6 +420,14 @@ func mainHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, payload)
+}
+
+// visitsHandler serves GET /visits.
+func visitsHandler(w http.ResponseWriter, r *http.Request) {
+	recordEndpointCall("/visits")
+	writeJSON(w, http.StatusOK, VisitsResponse{
+		Visits: getVisitsCount(),
+	})
 }
 
 // healthHandler serves GET /health.
@@ -395,6 +478,8 @@ func router(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/" && r.Method == http.MethodGet:
 		mainHandler(w, r)
+	case r.URL.Path == "/visits" && r.Method == http.MethodGet:
+		visitsHandler(w, r)
 	case r.URL.Path == "/health" && r.Method == http.MethodGet:
 		healthHandler(w, r)
 	case r.URL.Path == "/metrics" && r.Method == http.MethodGet:

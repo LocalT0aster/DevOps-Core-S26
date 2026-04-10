@@ -4,7 +4,7 @@
 
 ## Overview
 
-Small Flask web service that reports service metadata, system information, runtime uptime, and basic request details. Includes health, readiness, and Prometheus metrics endpoints for monitoring.
+Small Flask web service that reports service metadata, system information, runtime uptime, and basic request details. Includes a persistent visits counter stored at `/data/visits`, plus health, readiness, and Prometheus metrics endpoints for monitoring.
 
 ## Prerequisites
 
@@ -53,9 +53,25 @@ Gunicorn access logs are emitted as JSON so Loki can parse request fields cleanl
 ## API Endpoints
 
 - `GET /` - Service and system information
+- `GET /visits` - Current persisted visit counter
 - `GET /health` - Health check
 - `GET /ready` - Readiness check
 - `GET /metrics` - Prometheus metrics exposition
+
+## Visits Counter
+
+- The root handler increments the counter on every `GET /`.
+- The counter is persisted as plain text in `/data/visits`.
+- If the file is missing, the service starts from `0`.
+- If the file is malformed, empty, or negative, the service logs a warning and treats the value as `0`.
+
+## Local Docker Check
+
+For Lab 12, run the monitoring stack with a writable `/data` volume for the Python container and verify that:
+
+- repeated `GET /` calls increment the counter
+- `GET /visits` returns the current count
+- the counter survives a container restart because the backing file is persisted on the host
 
 ## Configuration
 
@@ -74,15 +90,16 @@ poetry install --with dev
 poetry run pytest --cov=src --cov-report=term-missing
 ```
 
+The test suite covers:
+
+- `GET /` response schema and visits counter increment behavior
+- `GET /visits` bootstrap, persisted reads, and malformed-file fallback
+- `GET /health` successful response schema and types
+- `404` JSON error handling for unknown routes
+- `500` JSON error handling for simulated internal failures
+
 ## Linting
 
 ```bash
 poetry run flake8 src tests
 ```
-
-Current test coverage includes:
-
-- `GET /` successful response schema and types
-- `GET /health` successful response schema and types
-- `404` JSON error handling for unknown routes
-- `500` JSON error handling for simulated internal failures

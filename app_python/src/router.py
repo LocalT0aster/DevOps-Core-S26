@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 import inspect
 from multiprocessing import cpu_count
 import platform
+from pathlib import Path
 import socket
+from threading import Lock
 
 from flask import jsonify, request
 
@@ -25,7 +27,9 @@ except ImportError:  # pragma: no cover - allows `python src/main.py`
         record_endpoint_call,
     )
 
-__version__ = "1.10.0"
+__version__ = "1.12.0"
+VISITS_FILE = Path("/data/visits")
+_VISITS_LOCK = Lock()
 
 
 def get_service_info() -> dict[str, str]:
@@ -128,9 +132,69 @@ def list_routes() -> list[dict[str, str]]:
     return out
 
 
+def _read_visits_count() -> int:
+    """Read the current visits counter, defaulting to zero when missing."""
+    try:
+        raw_count = VISITS_FILE.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return 0
+    except OSError as error:
+        logger.warning(
+            "failed to read visits counter",
+            extra={"path": str(VISITS_FILE), "error": str(error)},
+        )
+        return 0
+
+    if not raw_count:
+        logger.warning(
+            "invalid visits counter, resetting to zero",
+            extra={"path": str(VISITS_FILE), "value": ""},
+        )
+        return 0
+
+    try:
+        count = int(raw_count)
+    except ValueError:
+        logger.warning(
+            "invalid visits counter, resetting to zero",
+            extra={"path": str(VISITS_FILE), "value": raw_count},
+        )
+        return 0
+
+    if count < 0:
+        logger.warning(
+            "invalid visits counter, resetting to zero",
+            extra={"path": str(VISITS_FILE), "value": raw_count},
+        )
+        return 0
+
+    return count
+
+
+def _write_visits_count(count: int) -> None:
+    """Persist the visits counter to disk."""
+    VISITS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    VISITS_FILE.write_text(f"{count}\n", encoding="utf-8")
+
+
+def get_visits_count() -> int:
+    """Return the current persisted visits count."""
+    with _VISITS_LOCK:
+        return _read_visits_count()
+
+
+def increment_visits_count() -> int:
+    """Increment and persist the visits counter."""
+    with _VISITS_LOCK:
+        count = _read_visits_count() + 1
+        _write_visits_count(count)
+        return count
+
+
 @app.route("/")
 def index():
     """Service information."""
+    increment_visits_count()
     record_endpoint_call("/")
     return jsonify(
         {
@@ -141,6 +205,13 @@ def index():
             "endpoints": list_routes(),
         }
     )
+
+
+@app.route("/visits")
+def visits():
+    """Return the current persisted visits count."""
+    record_endpoint_call("/visits")
+    return jsonify({"visits": get_visits_count()})
 
 
 @app.route("/health")
