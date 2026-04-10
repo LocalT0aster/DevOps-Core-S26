@@ -68,10 +68,9 @@ vault:
   templateFile: "app-config.env"
 
 service:
-  type: NodePort
+  type: ClusterIP
   port: 80
   targetPort: 5000
-  nodePort: 30082
 
 resources:
   requests:
