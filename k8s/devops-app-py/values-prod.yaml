@@ -1,7 +1,7 @@
-replicaCount: 3
+replicaCount: 1
 
 image:
-  tag: "1.9"
+  tag: "1.12"
 
 deployment:
   revisionHistoryLimit: 10
@@ -11,8 +11,16 @@ env:
     value: "0.0.0.0"
   - name: PORT
     value: "5000"
-  - name: APP_ENV
-    value: "production"
+
+config:
+  file:
+    environment: "production"
+    featureFlags:
+      configReloadDemo: false
+  env:
+    data:
+      APP_ENV: "production"
+      LOG_LEVEL: "info"
 
 podLabels:
   environment: prod

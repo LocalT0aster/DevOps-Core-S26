@@ -1,0 +1,24 @@
+{{- if .Values.config.file.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "devops-app-py.fileConfigMapName" . }}
+  labels:
+    {{- include "devops-app-py.labels" . | nindent 4 }}
+data:
+  config.json: |-
+{{ include "devops-app-py.renderedConfigJson" . | indent 4 }}
+{{- end }}
+{{- if and .Values.config.file.enabled .Values.config.env.enabled }}
+---
+{{- end }}
+{{- if .Values.config.env.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "devops-app-py.envConfigMapName" . }}
+  labels:
+    {{- include "devops-app-py.labels" . | nindent 4 }}
+data:
+  {{- toYaml .Values.config.env.data | nindent 2 }}
+{{- end }}

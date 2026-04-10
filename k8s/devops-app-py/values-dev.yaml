@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  tag: "1.9-dev"
+  tag: "1.12-dev"
 
 deployment:
   revisionHistoryLimit: 2
@@ -11,8 +11,14 @@ env:
     value: "0.0.0.0"
   - name: PORT
     value: "5000"
-  - name: APP_ENV
-    value: "development"
+
+config:
+  file:
+    environment: "development"
+  env:
+    data:
+      APP_ENV: "development"
+      LOG_LEVEL: "debug"
 
 podLabels:
   environment: dev
@@ -21,7 +27,7 @@ service:
   type: NodePort
   port: 80
   targetPort: 5000
-  nodePort: 30081
+  nodePort: 30082
 
 resources:
   requests:

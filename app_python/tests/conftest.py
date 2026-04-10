@@ -12,3 +12,9 @@ def client():
     app.config.update(TESTING=True, PROPAGATE_EXCEPTIONS=False)
     with app.test_client() as test_client:
         yield test_client
+
+
+@pytest.fixture(autouse=True)
+def isolated_visits_file(tmp_path, monkeypatch):
+    """Route the visits counter to a per-test temporary file."""
+    monkeypatch.setattr(src.router, "VISITS_FILE", tmp_path / "visits")
