@@ -15,7 +15,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "devops-app-py.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/name: {{ include "devops-app-py.name" . }}
         app.kubernetes.io/component: hook
     spec:
       restartPolicy: Never
