@@ -25,6 +25,9 @@ config:
 podLabels:
   environment: prod
 
+podAnnotations:
+  lab13-sync-wave: "1"
+
 service:
   type: ClusterIP
   port: 80
