@@ -1,6 +1,6 @@
 # Kubernetes Lab 13 - GitOps with ArgoCD
 
-I reused the existing Docker-backed `minikube` profile and built Lab 13 on top of the running Lab 11/12 environment instead of resetting the cluster. ArgoCD was installed from the official Helm chart as `argo/argo-cd 9.5.0` with app version `v3.3.6`, and the GitOps source for every `Application` in this lab is `https://github.com/LocalT0aster/DevOps-Core-S26.git` on branch `lab13`. Screenshots were intentionally deferred in this run, so the UI access path is verified here but the actual browser captures are listed separately at the end.
+I reused the existing Docker-backed `minikube` profile and built Lab 13 on top of the running Lab 11/12 environment instead of resetting the cluster. ArgoCD was installed from the official Helm chart as `argo/argo-cd 9.5.0` with app version `v3.3.6`, and the GitOps source for every `Application` in this lab is `https://github.com/LocalT0aster/DevOps-Core-S26.git` on branch `lab13`. The ArgoCD UI screenshots below capture the final applications overview, an application details page, and the sync-policy comparison between `dev` and `prod`.
 
 ## Current Cluster Context
 
@@ -35,7 +35,7 @@ vault               vault      1         deployed  vault-0.32.0        1.21.2
 
 The local `argocd` CLI was already installed as `v3.3.3+unknown`, so I only needed to add the official Helm repo, pin the chart version, install ArgoCD into namespace `argocd`, and log in over a local TLS port-forward. I exposed `svc/argocd-server` on `https://127.0.0.1:8080`, confirmed the UI returned the login HTML over HTTPS, retrieved the initial admin password in redacted form, and verified CLI access with `argocd app list`.
 
-Because screenshots were deferred, I did not claim browser interaction beyond confirming the UI endpoint was reachable. The missing browser captures are listed in `Screenshots Still Required`.
+I also verified the browser-access path through the same TLS port-forward and captured the resulting ArgoCD UI views for the final documentation.
 
 <details>
 <summary><code>helm repo add argo</code>, <code>helm search repo argo/argo-cd --versions</code>, and Helm install</summary>
@@ -383,11 +383,19 @@ Health Status:      Healthy
 
 </details>
 
-## Screenshots Still Required
+## Screenshots
 
-- ArgoCD UI overview showing both `devops-app-py-dev` and `devops-app-py-prod`.
-- Application details page for either dev or prod, including sync status and health.
-- Drift comparison state showing dev auto-syncing while prod remains `OutOfSync`.
+ArgoCD applications overview:
+
+![](img/lab13_applications_overview.png)
+
+Application details view:
+
+![](img/lab13_application_details.png)
+
+Dev auto-sync vs prod manual sync:
+
+![](img/lab13_sync_policy_difference.png)
 
 ## Final State
 
@@ -413,11 +421,3 @@ pod/devops-app-py-prod-764c4cdb7f-qf2n5   1/1 Running
 ```
 
 </details>
-
-## References
-
-- [ArgoCD Getting Started](https://argo-cd.readthedocs.io/en/stable/getting_started/)
-- [ArgoCD Declarative Setup](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/)
-- [ArgoCD Automated Sync Policy](https://argo-cd.readthedocs.io/en/stable/user-guide/auto_sync/)
-- [ArgoCD FAQ](https://argo-cd.readthedocs.io/en/latest/faq/)
-- [Argo Helm Chart](https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd)
