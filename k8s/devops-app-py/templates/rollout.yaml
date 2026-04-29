@@ -1,0 +1,43 @@
+{{- if .Values.rollout.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "devops-app-py.fullname" . }}
+  labels:
+    {{- include "devops-app-py.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "devops-app-py.selectorLabels" . | nindent 6 }}
+  strategy:
+    {{- if eq .Values.rollout.strategy "blueGreen" }}
+    blueGreen:
+      activeService: {{ default (include "devops-app-py.serviceName" .) .Values.rollout.blueGreen.activeService }}
+      {{- if .Values.rollout.blueGreen.previewService.enabled }}
+      previewService: {{ include "devops-app-py.previewServiceName" . }}
+      {{- end }}
+      autoPromotionEnabled: {{ .Values.rollout.blueGreen.autoPromotionEnabled }}
+      scaleDownDelaySeconds: {{ .Values.rollout.blueGreen.scaleDownDelaySeconds }}
+      {{- if .Values.rollout.analysis.enabled }}
+      prePromotionAnalysis:
+        templates:
+          - templateName: {{ include "devops-app-py.analysisTemplateName" . }}
+      {{- end }}
+    {{- else }}
+    canary:
+      {{- with .Values.rollout.canary.steps }}
+      steps:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.rollout.analysis.enabled }}
+      analysis:
+        startingStep: {{ .Values.rollout.analysis.startingStep }}
+        templates:
+          - templateName: {{ include "devops-app-py.analysisTemplateName" . }}
+      {{- end }}
+    {{- end }}
+  template:
+    {{- include "devops-app-py.podTemplate" . | nindent 4 }}
+{{- end }}

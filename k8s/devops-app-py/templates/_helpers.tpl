@@ -59,6 +59,20 @@ Create the service name.
 {{- end }}
 
 {{/*
+Create the blue-green preview service name.
+*/}}
+{{- define "devops-app-py.previewServiceName" -}}
+{{- default (printf "%s-preview" (include "devops-app-py.serviceName" .)) .Values.rollout.blueGreen.previewService.name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Create the AnalysisTemplate name.
+*/}}
+{{- define "devops-app-py.analysisTemplateName" -}}
+{{- default (printf "%s-health-check" (include "devops-app-py.fullname" .)) .Values.rollout.analysis.templateName | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
 Create the secret name.
 */}}
 {{- define "devops-app-py.secretName" -}}
@@ -95,6 +109,96 @@ Create the service account name.
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
+{{- end }}
+
+{{/*
+Render the workload pod template shared by Deployments and Rollouts.
+*/}}
+{{- define "devops-app-py.podTemplate" -}}
+{{- $envVars := include "devops-app-py.envVars" . | trim }}
+{{- $vaultAnnotations := include "devops-app-py.vaultAnnotations" . | trim }}
+{{- $configChecksums := include "devops-app-py.configChecksums" . | trim }}
+metadata:
+  {{- if or $vaultAnnotations $configChecksums .Values.podAnnotations }}
+  annotations:
+    {{- if $vaultAnnotations }}
+    {{- $vaultAnnotations | nindent 4 }}
+    {{- end }}
+    {{- if $configChecksums }}
+    {{- $configChecksums | nindent 4 }}
+    {{- end }}
+    {{- with .Values.podAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  labels:
+    {{- include "devops-app-py.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/part-of: {{ .Values.partOf }}
+    {{- with .Values.podLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  serviceAccountName: {{ include "devops-app-py.serviceAccountName" . }}
+  containers:
+    - name: {{ include "devops-app-py.name" . }}
+      image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+      imagePullPolicy: {{ .Values.image.pullPolicy }}
+      ports:
+        - name: http
+          containerPort: {{ .Values.containerPort }}
+          protocol: TCP
+      {{- if or .Values.config.file.enabled .Values.persistence.enabled }}
+      volumeMounts:
+        {{- if .Values.config.file.enabled }}
+        - name: config-volume
+          mountPath: {{ .Values.config.mountPath | quote }}
+          readOnly: true
+        {{- end }}
+        {{- if .Values.persistence.enabled }}
+        - name: data-volume
+          mountPath: {{ .Values.persistence.mountPath | quote }}
+        {{- end }}
+      {{- end }}
+      {{- if or .Values.config.env.enabled .Values.secrets.enabled }}
+      envFrom:
+        {{- if .Values.config.env.enabled }}
+        - configMapRef:
+            name: {{ include "devops-app-py.envConfigMapName" . }}
+        {{- end }}
+        {{- if .Values.secrets.enabled }}
+        - secretRef:
+            name: {{ include "devops-app-py.secretName" . }}
+        {{- end }}
+      {{- end }}
+      {{- if $envVars }}
+      env:
+        {{- $envVars | nindent 8 }}
+      {{- end }}
+      {{- with .Values.livenessProbe }}
+      livenessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.readinessProbe }}
+      readinessProbe:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.resources }}
+      resources:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- if or .Values.config.file.enabled .Values.persistence.enabled }}
+  volumes:
+    {{- if .Values.config.file.enabled }}
+    - name: config-volume
+      configMap:
+        name: {{ include "devops-app-py.fileConfigMapName" . }}
+    {{- end }}
+    {{- if .Values.persistence.enabled }}
+    - name: data-volume
+      persistentVolumeClaim:
+        claimName: {{ include "devops-app-py.pvcName" . }}
+    {{- end }}
+  {{- end }}
 {{- end }}
 
 {{/*

@@ -1,8 +1,6 @@
+{{- if not .Values.rollout.enabled }}
 apiVersion: apps/v1
 kind: Deployment
-{{- $envVars := include "devops-app-py.envVars" . | trim }}
-{{- $vaultAnnotations := include "devops-app-py.vaultAnnotations" . | trim }}
-{{- $configChecksums := include "devops-app-py.configChecksums" . | trim }}
 metadata:
   name: {{ include "devops-app-py.fullname" . }}
   labels:
@@ -19,84 +17,5 @@ spec:
     matchLabels:
       {{- include "devops-app-py.selectorLabels" . | nindent 6 }}
   template:
-    metadata:
-      {{- if or $vaultAnnotations $configChecksums .Values.podAnnotations }}
-      annotations:
-        {{- if $vaultAnnotations }}
-        {{- $vaultAnnotations | nindent 8 }}
-        {{- end }}
-        {{- if $configChecksums }}
-        {{- $configChecksums | nindent 8 }}
-        {{- end }}
-        {{- with .Values.podAnnotations }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-      {{- end }}
-      labels:
-        {{- include "devops-app-py.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/part-of: {{ .Values.partOf }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
-    spec:
-      serviceAccountName: {{ include "devops-app-py.serviceAccountName" . }}
-      containers:
-        - name: {{ include "devops-app-py.name" . }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          ports:
-            - name: http
-              containerPort: {{ .Values.containerPort }}
-              protocol: TCP
-          {{- if or .Values.config.file.enabled .Values.persistence.enabled }}
-          volumeMounts:
-            {{- if .Values.config.file.enabled }}
-            - name: config-volume
-              mountPath: {{ .Values.config.mountPath | quote }}
-              readOnly: true
-            {{- end }}
-            {{- if .Values.persistence.enabled }}
-            - name: data-volume
-              mountPath: {{ .Values.persistence.mountPath | quote }}
-            {{- end }}
-          {{- end }}
-          {{- if or .Values.config.env.enabled .Values.secrets.enabled }}
-          envFrom:
-            {{- if .Values.config.env.enabled }}
-            - configMapRef:
-                name: {{ include "devops-app-py.envConfigMapName" . }}
-            {{- end }}
-            {{- if .Values.secrets.enabled }}
-            - secretRef:
-                name: {{ include "devops-app-py.secretName" . }}
-            {{- end }}
-          {{- end }}
-          {{- if $envVars }}
-          env:
-            {{- $envVars | nindent 12 }}
-          {{- end }}
-          {{- with .Values.livenessProbe }}
-          livenessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.resources }}
-          resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- if or .Values.config.file.enabled .Values.persistence.enabled }}
-      volumes:
-        {{- if .Values.config.file.enabled }}
-        - name: config-volume
-          configMap:
-            name: {{ include "devops-app-py.fileConfigMapName" . }}
-        {{- end }}
-        {{- if .Values.persistence.enabled }}
-        - name: data-volume
-          persistentVolumeClaim:
-            claimName: {{ include "devops-app-py.pvcName" . }}
-        {{- end }}
-      {{- end }}
+    {{- include "devops-app-py.podTemplate" . | nindent 4 }}
+{{- end }}

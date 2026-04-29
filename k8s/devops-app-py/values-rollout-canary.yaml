@@ -1,0 +1,33 @@
+replicaCount: 5
+
+image:
+  tag: "1.12"
+
+deployment:
+  revisionHistoryLimit: 5
+
+podAnnotations:
+  lab14-version: "canary-v1"
+
+rollout:
+  enabled: true
+  strategy: canary
+  canary:
+    steps:
+      - setWeight: 20
+      - pause: {}
+      - setWeight: 40
+      - pause:
+          duration: 30s
+      - setWeight: 60
+      - pause:
+          duration: 30s
+      - setWeight: 80
+      - pause:
+          duration: 30s
+      - setWeight: 100
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000

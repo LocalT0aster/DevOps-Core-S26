@@ -1,0 +1,24 @@
+{{- if and .Values.rollout.enabled .Values.rollout.analysis.enabled }}
+{{- $serviceName := include "devops-app-py.serviceName" . }}
+{{- $path := .Values.rollout.analysis.path | default "/health" }}
+{{- $url := .Values.rollout.analysis.url | default (printf "http://%s.%s.svc:%v%s" $serviceName .Release.Namespace .Values.service.port $path) }}
+{{- $successCondition := .Values.rollout.analysis.successCondition | default (printf "result == \"%s\"" .Values.rollout.analysis.expectedStatus) }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "devops-app-py.analysisTemplateName" . }}
+  labels:
+    {{- include "devops-app-py.labels" . | nindent 4 }}
+spec:
+  metrics:
+    - name: {{ .Values.rollout.analysis.metricName }}
+      interval: {{ .Values.rollout.analysis.interval | quote }}
+      count: {{ .Values.rollout.analysis.count }}
+      failureLimit: {{ .Values.rollout.analysis.failureLimit }}
+      successCondition: {{ $successCondition | quote }}
+      provider:
+        web:
+          url: {{ $url | quote }}
+          timeoutSeconds: {{ .Values.rollout.analysis.timeoutSeconds }}
+          jsonPath: {{ .Values.rollout.analysis.jsonPath | quote }}
+{{- end }}

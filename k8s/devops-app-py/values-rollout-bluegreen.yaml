@@ -1,0 +1,26 @@
+replicaCount: 3
+
+image:
+  tag: "1.12"
+
+deployment:
+  revisionHistoryLimit: 5
+
+podAnnotations:
+  lab14-version: "green-v1"
+
+rollout:
+  enabled: true
+  strategy: blueGreen
+  blueGreen:
+    activeService: ""
+    previewService:
+      enabled: true
+      name: ""
+    autoPromotionEnabled: false
+    scaleDownDelaySeconds: 30
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 5000
