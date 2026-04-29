@@ -20,6 +20,33 @@ deployment:
     maxSurge: 1
     maxUnavailable: 0
 
+rollout:
+  enabled: false
+  strategy: canary
+  canary:
+    steps: []
+  blueGreen:
+    activeService: ""
+    previewService:
+      enabled: false
+      name: ""
+    autoPromotionEnabled: false
+    scaleDownDelaySeconds: 30
+  analysis:
+    enabled: false
+    templateName: ""
+    metricName: health-check
+    startingStep: 1
+    interval: 10s
+    count: 1
+    failureLimit: 0
+    path: /health
+    jsonPath: "{$.status}"
+    expectedStatus: healthy
+    successCondition: ""
+    url: ""
+    timeoutSeconds: 5
+
 env:
   - name: HOST
     value: "0.0.0.0"
